@@ -191,6 +191,9 @@ def ensure_dirs():
     for path in (ROOT / "data", REPORTS, ASSETS):
         path.mkdir(parents=True, exist_ok=True)
 
+# Вызываем сразу при импорте — нужно для gunicorn (main() не вызывается)
+ensure_dirs()
+
 
 def read_state():
     ensure_dirs()
