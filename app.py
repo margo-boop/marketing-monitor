@@ -2781,6 +2781,16 @@ class Handler(BaseHTTPRequestHandler):
         return json.loads(self.rfile.read(length).decode("utf-8"))
 
     def do_GET(self):
+        # Статус фоновой задачи
+        if self.path.startswith("/api/job/"):
+            job_id = self.path[len("/api/job/"):]
+            job = JOBS.get(job_id)
+            if job is None:
+                self.send_json({"status": "not_found"}, 404)
+            else:
+                self.send_json(job)
+            return
+
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path
         if path == "/":
@@ -2887,18 +2897,6 @@ class Handler(BaseHTTPRequestHandler):
             traceback.print_exc()
             self.send_json({"ok": False, "error": str(exc)}, 500)
 
-    def do_GET(self):
-        # /api/job/<id> — статус фоновой задачи
-        if self.path.startswith("/api/job/"):
-            job_id = self.path[len("/api/job/"):]
-            job = JOBS.get(job_id)
-            if job is None:
-                self.send_json({"status": "not_found"}, 404)
-            else:
-                self.send_json(job)
-            return
-        # Остальное — статические файлы (стандартный обработчик)
-        super().do_GET()
 
 
 def main():
