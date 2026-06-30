@@ -16,6 +16,12 @@ import urllib.parse
 import urllib.request
 from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+try:
+    from flask import Flask as _Flask, request as _freq, jsonify as _fjson, send_from_directory as _fsend
+    _flask_ok = True
+except ImportError:
+    _flask_ok = False
 from pathlib import Path
 
 try:
@@ -2762,6 +2768,125 @@ def render_pdf(month, items, pdf_path):
     doc.build(story)
 
 
+# ---------------------------------------------------------------------------
+# Flask WSGI-приложение (используется и локально, и на Railway)
+# ---------------------------------------------------------------------------
+
+flask_app = None
+
+if _flask_ok:
+    flask_app = _Flask(__name__, static_folder=None)
+
+    @flask_app.after_request
+    def _no_cache(resp):
+        resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        resp.headers["Pragma"] = "no-cache"
+        return resp
+
+    # ── Статус фоновой задачи ──────────────────────────────────────────────
+    @flask_app.route("/api/job/<job_id>")
+    def _api_job(job_id):
+        job = JOBS.get(job_id)
+        if job is None:
+            return _fjson({"status": "not_found"}), 404
+        return _fjson(job)
+
+    # ── Запуск сбора данных ────────────────────────────────────────────────
+    @flask_app.route("/api/run", methods=["POST"])
+    def _api_run():
+        import threading, uuid
+        payload = _freq.get_json(force=True) or {}
+        job_id = uuid.uuid4().hex[:12]
+        JOBS[job_id] = {"status": "running", "step": "Запускаю сбор данных..."}
+
+        def run_job():
+            try:
+                month          = payload.get("month", "jun")
+                import_text    = payload.get("importText", "")
+                sources        = payload.get("sources", {})
+                manual_metrics = payload.get("manualMetrics", {})
+                auth           = payload.get("auth", {})
+
+                state = read_state()
+                state["sources"] = sources
+                write_state(state)
+
+                JOBS[job_id]["step"] = "Собираю данные с сайтов и соцсетей..."
+                items = merge_real_data(month, import_text, sources, manual_metrics, auth)
+
+                JOBS[job_id]["step"] = "Формирую отчёт..."
+                stamp     = time.strftime("%Y%m%d-%H%M%S")
+                base      = f"{month}-{stamp}"
+                html_report = render_report_html(month, items)
+                html_path = REPORTS / f"{base}.html"
+                pdf_path  = REPORTS / f"{base}.pdf"
+                json_path = REPORTS / f"{base}.json"
+                html_path.write_text(html_report, "utf-8")
+                json_path.write_text(
+                    json.dumps(asdict_data(items), ensure_ascii=False, indent=2), "utf-8"
+                )
+
+                pdf_error = None
+                try:
+                    render_pdf(month, items, pdf_path)
+                except Exception as exc:
+                    pdf_error = str(exc)
+
+                state = read_state()
+                run_info = {
+                    "month":   month,
+                    "html":    str(html_path.relative_to(ROOT)),
+                    "pdf":     str(pdf_path.relative_to(ROOT)) if pdf_path.exists() else None,
+                    "json":    str(json_path.relative_to(ROOT)),
+                    "created": stamp,
+                }
+                state.setdefault("runs", {})[base] = run_info
+                write_state(state)
+
+                JOBS[job_id] = {
+                    "status":   "done",
+                    "step":     "Готово!",
+                    "report":   run_info,
+                    "pdfError": pdf_error,
+                    "data":     asdict_data(items),
+                }
+            except Exception as exc:
+                traceback.print_exc()
+                JOBS[job_id] = {"status": "error", "step": "Ошибка", "error": str(exc)}
+
+        threading.Thread(target=run_job, daemon=True).start()
+        return _fjson({"ok": True, "jobId": job_id})
+
+    # ── Состояние (список прошлых отчётов) ────────────────────────────────
+    @flask_app.route("/api/state", methods=["POST"])
+    def _api_state():
+        return _fjson(read_state())
+
+    # ── Файлы из папки output (HTML/PDF/JSON отчёты) ──────────────────────
+    @flask_app.route("/output/<path:filename>")
+    def _serve_output(filename):
+        return _fsend(ROOT / "output", filename)
+
+    # ── Статические файлы (index.html, CSS, JS …) ─────────────────────────
+    @flask_app.route("/")
+    def _serve_index():
+        return _fsend(STATIC, "index.html")
+
+    @flask_app.route("/<path:filename>")
+    def _serve_static(filename):
+        p = STATIC / filename
+        if p.exists():
+            return _fsend(STATIC, filename)
+        p2 = ROOT / filename
+        if p2.exists():
+            return _fsend(ROOT, filename)
+        return "Not found", 404
+
+
+# ---------------------------------------------------------------------------
+# Запасной Handler (используется локально, если Flask не установлен)
+# ---------------------------------------------------------------------------
+
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
         sys.stderr.write("[%s] %s\n" % (time.strftime("%H:%M:%S"), fmt % args))
@@ -2904,38 +3029,45 @@ def main():
     import threading
     import webbrowser
 
-    # В облаке (Railway/Render) PORT задаётся снаружи и нужен bind 0.0.0.0
-    # Локально — 127.0.0.1 для безопасности
     cloud_mode = "RAILWAY_ENVIRONMENT" in os.environ or "RENDER" in os.environ
-    host = "0.0.0.0" if cloud_mode else "127.0.0.1"
+    host       = "0.0.0.0" if cloud_mode else "127.0.0.1"
     start_port = int(os.environ.get("PORT", "8787"))
 
-    server = None
-    port = start_port
-    if cloud_mode:
-        # В облаке только один порт — тот что задан
-        server = ThreadingHTTPServer((host, start_port), Handler)
+    # ── Flask-путь (предпочтительный) ─────────────────────────────────────
+    if flask_app is not None:
         port = start_port
+        print(f"Marketing monitor: http://{host}:{port}")
+
+        if not cloud_mode:
+            threading.Timer(1.2, lambda: webbrowser.open(f"http://127.0.0.1:{port}")).start()
+
+        # Waitress — production WSGI-сервер (Railway/локально)
+        try:
+            from waitress import serve as _wsrv
+            _wsrv(flask_app, host=host, port=port, threads=8)
+        except ImportError:
+            # Фоллбэк: Flask dev-сервер
+            flask_app.run(host=host, port=port, threaded=True, use_reloader=False)
+        return
+
+    # ── Запасной путь: встроенный HTTP-сервер (если Flask не установлен) ──
+    server = None
+    port   = start_port
+    if cloud_mode:
+        server = ThreadingHTTPServer((host, start_port), Handler)
     else:
-        # Локально: пробуем диапазон портов (старый сервер мог не закрыться)
         for candidate in range(start_port, start_port + 20):
             try:
                 server = ThreadingHTTPServer((host, candidate), Handler)
-                port = candidate
+                port   = candidate
                 break
             except OSError:
                 continue
         if server is None:
-            print("Не удалось занять ни один порт в диапазоне "
-                  f"{start_port}-{start_port + 19}. Закройте старое окно программы и попробуйте снова.")
+            print("Не удалось занять ни один порт. Закройте старое окно программы.")
             return
 
-    url = f"http://{host}:{port}"
-    print(f"Marketing monitor: {url}")
-    if not cloud_mode and port != start_port:
-        print(f"(порт {start_port} был занят — использую {port})")
-
-    # Открываем браузер только локально
+    print(f"Marketing monitor: http://{host}:{port}")
     if not cloud_mode:
         threading.Timer(1.2, lambda: webbrowser.open(f"http://127.0.0.1:{port}")).start()
 
