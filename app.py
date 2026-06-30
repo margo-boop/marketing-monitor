@@ -2801,6 +2801,7 @@ if _flask_ok:
 
         def run_job():
             try:
+                print(f"[JOB {job_id}] Старт", flush=True)
                 month          = payload.get("month", "jun")
                 import_text    = payload.get("importText", "")
                 sources        = payload.get("sources", {})
@@ -2812,7 +2813,9 @@ if _flask_ok:
                 write_state(state)
 
                 JOBS[job_id]["step"] = "Собираю данные с сайтов и соцсетей..."
+                print(f"[JOB {job_id}] merge_real_data...", flush=True)
                 items = merge_real_data(month, import_text, sources, manual_metrics, auth)
+                print(f"[JOB {job_id}] merge_real_data готово, рендерю отчёт...", flush=True)
 
                 JOBS[job_id]["step"] = "Формирую отчёт..."
                 stamp     = time.strftime("%Y%m%d-%H%M%S")
@@ -2850,8 +2853,10 @@ if _flask_ok:
                     "pdfError": pdf_error,
                     "data":     asdict_data(items),
                 }
+                print(f"[JOB {job_id}] Готово!", flush=True)
             except Exception as exc:
                 traceback.print_exc()
+                print(f"[JOB {job_id}] ОШИБКА: {exc}", flush=True)
                 JOBS[job_id] = {"status": "error", "step": "Ошибка", "error": str(exc)}
 
         threading.Thread(target=run_job, daemon=True).start()
