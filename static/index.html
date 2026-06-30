@@ -606,23 +606,31 @@ MD Audit VK 870</div>
       $("result").scrollIntoView({ behavior: "smooth", block: "start" });
     }
 
-    async function pollJob(jobId, statusEl) {
+    async function pollJob(statusEl) {
       const dots = [".", "..", "..."];
       let i = 0;
+      let waited = 0;
       return new Promise((resolve, reject) => {
         const timer = setInterval(async () => {
           try {
-            const r = await fetch("/api/job/" + jobId);
+            const r = await fetch("/api/job/current");
             const job = await r.json();
             const dot = dots[i++ % dots.length];
+            waited += 4000;
             if (job.status === "running") {
               statusEl.textContent = (job.step || "Собираю данные") + dot;
             } else if (job.status === "done") {
               clearInterval(timer);
               resolve(job);
+            } else if (job.status === "not_found" && waited < 20000) {
+              // Задача ещё не стартовала — ждём до 20 сек
+              statusEl.textContent = "Запускаю сбор" + dot;
+            } else if (job.status === "error") {
+              clearInterval(timer);
+              reject(new Error(job.error || "Ошибка сбора данных"));
             } else {
               clearInterval(timer);
-              reject(new Error(job.error || "Неизвестная ошибка"));
+              reject(new Error("Задача не запустилась. Попробуйте ещё раз."));
             }
           } catch (e) {
             clearInterval(timer);
@@ -639,7 +647,9 @@ MD Audit VK 870</div>
       setRunning(true);
 
       try {
-        const response = await fetch("/api/run", {
+        // Отправляем запрос и сразу начинаем опрос — не ждём ответа
+        // (Railway-прокси может оборвать соединение, но задача всё равно запустится)
+        fetch("/api/run", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -649,11 +659,9 @@ MD Audit VK 870</div>
             manualMetrics: getManualMetrics(),
             auth: getAuth()
           })
-        });
-        const data = await response.json();
-        if (!response.ok || !data.ok) throw new Error(data.error || "Не удалось запустить сбор");
+        }).catch(() => {});  // ошибки соединения игнорируем
 
-        const job = await pollJob(data.jobId, status);
+        const job = await pollJob(status);
         showResult(job);
         status.className = "status ok";
         status.textContent = "Готово! Откройте отчёт ниже.";

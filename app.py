@@ -2003,10 +2003,15 @@ def merge_real_data(month, import_text, sources, manual_metrics=None, auth=None)
             subs = ch.get("subscribers", "")
             if subs and subs != "—":
                 data.social.append(f"{ch['platform']} {ch['handle']}: {subs} подписчиков")
-            # События из Telegram
+            # События из Telegram (с дедупликацией по URL и заголовку)
             for p in ch.get("posts", []):
                 if p.get("category") == "Мероприятие":
-                    data.events.append(p)
+                    _key = (p.get("url") or p.get("title", "")[:60]).lower().strip()
+                    if not any(
+                        (ev.get("url") or ev.get("title", "")[:60]).lower().strip() == _key
+                        for ev in data.events
+                    ):
+                        data.events.append(p)
         # Ручные подписчики (из import text)
         if manual_social.get("telegram"):
             data.social.append(f"Telegram: {manual_social['telegram']} подписчиков (вручную)")
@@ -2134,39 +2139,33 @@ def mention_item_html(x):
 
 
 def event_item_html(ev):
-    """Форматирует мероприятие: формат + роль + дата + одно предложение + ссылки."""
-    fmt_label = ev.get("format", "Мероприятие")
-    role      = ev.get("role", "")
+    """Форматирует мероприятие: дата — описание со ссылкой (нумерованный список)."""
     date_str  = format_date(ev.get("lastmod", ""))
-    title     = ev.get("title", "")[:200]
+    title     = (ev.get("title", "") or "").strip()[:220]
     reg_link  = ev.get("reg_link", "")
     rec_link  = ev.get("rec_link", "")
     url       = ev.get("url", "")
 
-    # Цвет по формату
-    fmt_colors = {
-        "Вебинар": "#1565c0", "Конференция": "#6a1b9a", "Выставка": "#e65100",
-        "Митап": "#00695c", "Кейс-чемпионат": "#ad1457", "Онлайн-эфир": "#0277bd",
-    }
-    color = fmt_colors.get(fmt_label, "#5c6bc0")
-    role_tag = f' · <b style="color:#555">{e(role)}</b>' if role else ""
-    date_tag = f' · <span style="color:#888">{e(date_str)}</span>' if date_str else ""
-    fmt_badge = f'<span style="font-size:10px;padding:1px 6px;border-radius:3px;background:{color};color:#fff;margin-right:6px">{e(fmt_label)}</span>'
+    # Приоритет ссылки: регистрация → запись → источник
+    main_link = reg_link or rec_link or url
 
-    links_html = ""
-    if reg_link:
-        links_html += f' <a href="{e(reg_link)}" target="_blank" style="font-size:11px">[Регистрация]</a>'
-    if rec_link:
-        links_html += f' <a href="{e(rec_link)}" target="_blank" style="font-size:11px">[Запись]</a>'
-    if url and url != reg_link and url != rec_link:
-        links_html += f' <a href="{e(url)}" target="_blank" style="font-size:11px">[Подробнее]</a>'
+    # Текст мероприятия со встроенной ссылкой
+    if main_link and title:
+        body = f'<a href="{e(main_link)}" target="_blank" style="color:#1a73e8">{e(title)}</a>'
+    elif title:
+        body = e(title)
+    else:
+        body = ""
 
-    return (
-        f'<li style="margin-bottom:8px">'
-        f'{fmt_badge}{role_tag}{date_tag}'
-        f'<div style="margin-top:3px">{e(title)}{links_html}</div>'
-        f'</li>'
-    )
+    # Дата перед тире
+    prefix = f'<b>{e(date_str)}</b> — ' if date_str else ""
+
+    # Дополнительная ссылка на запись, если есть и отличается от основной
+    extra = ""
+    if rec_link and rec_link != main_link:
+        extra = f' <a href="{e(rec_link)}" target="_blank" style="font-size:11px;color:#666">[Запись]</a>'
+
+    return f'<li style="margin-bottom:8px;line-height:1.5">{prefix}{body}{extra}</li>'
 
 
 def update_block_html(updates):
@@ -2527,7 +2526,7 @@ td.left{text-align:left}
         # ── Мероприятия ──────────────────────────────────────────────
         events_html = "".join(event_item_html(ev) for ev in item.events)
         events_block = (
-            f'<ul class="events-list">{events_html}</ul>'
+            f'<ol style="padding-left:20px;margin:0">{events_html}</ol>'
             if events_html
             else '<p class="empty-note">Анонсов мероприятий не найдено.</p>'
         )
@@ -2794,9 +2793,9 @@ if _flask_ok:
     # ── Запуск сбора данных ────────────────────────────────────────────────
     @flask_app.route("/api/run", methods=["POST"])
     def _api_run():
-        import threading, uuid
+        import threading
         payload = _freq.get_json(force=True) or {}
-        job_id = uuid.uuid4().hex[:12]
+        job_id = "current"
         JOBS[job_id] = {"status": "running", "step": "Запускаю сбор данных..."}
 
         def run_job():
@@ -2898,11 +2897,16 @@ class Handler(BaseHTTPRequestHandler):
 
     def send_json(self, data, status=200):
         body = json.dumps(data, ensure_ascii=False).encode("utf-8")
-        self.send_response(status)
-        self.send_header("Content-Type", "application/json; charset=utf-8")
-        self.send_header("Content-Length", str(len(body)))
-        self.end_headers()
-        self.wfile.write(body)
+        try:
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Connection", "close")
+            self.end_headers()
+            self.wfile.write(body)
+            self.wfile.flush()
+        except (BrokenPipeError, ConnectionResetError, OSError):
+            pass  # клиент отключился — фоновое задание всё равно работает
 
     def read_json(self):
         length = int(self.headers.get("Content-Length", "0") or 0)
@@ -2951,15 +2955,20 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
         self.send_header("Pragma", "no-cache")
         self.send_header("Expires", "0")
-        self.end_headers()
-        self.wfile.write(data)
+        try:
+            self.end_headers()
+            self.wfile.write(data)
+            self.wfile.flush()
+        except (BrokenPipeError, ConnectionResetError, OSError):
+            pass
 
     def do_POST(self):
         try:
             if self.path == "/api/run":
-                import threading, uuid
+                import threading
                 payload = self.read_json()
-                job_id = uuid.uuid4().hex[:12]
+                # Фиксированный ключ — клиент всегда опрашивает /api/job/current
+                job_id = "current"
                 JOBS[job_id] = {"status": "running", "step": "Запускаю сбор данных..."}
 
                 def run_job():
