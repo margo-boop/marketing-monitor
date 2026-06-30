@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.pyc
+output/reports/*.html
+output/reports/*.pdf
+output/reports/*.json
+output/assets/
+logs/
+data/state.json
+*.command
+*.bat

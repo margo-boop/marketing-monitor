@@ -1,0 +1,659 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>Мониторинг конкурентов</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#f5f5f3;--s:#fff;--b:#e0e0dc;--bs:#b0b0a8;
+  --t:#161614;--m:#606058;--h:#989890;
+  --ab:#eeeee8;--bl:#1356a0;--blb:#ddeaf7;
+  --gn:#2a6410;--gnb:#e0f2d8;--am:#7a4808;--amb:#faead0;
+}
+html,body{height:100%;overflow:hidden}
+body{background:var(--bg);color:var(--t);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-size:15px}
+.hdr{position:fixed;top:0;left:0;right:0;height:52px;background:var(--s);border-bottom:1px solid var(--b);display:flex;align-items:center;padding:0 14px;gap:10px;z-index:300}
+.logo{font-size:13px;font-weight:700;letter-spacing:-.3px;white-space:nowrap}
+.sp{flex:1}
+.hmo{font-size:12px;color:var(--m);white-space:nowrap}
+.hmb{display:none;background:none;border:1px solid var(--b);border-radius:6px;padding:6px 9px;cursor:pointer;font-size:16px;line-height:1;color:var(--t)}
+.lay{display:flex;height:100vh;padding-top:52px}
+.sb{width:200px;min-width:200px;border-right:1px solid var(--b);background:var(--s);overflow-y:auto;padding:10px 7px;flex-shrink:0;transition:transform .22s}
+.sb-sec{margin-bottom:18px}
+.sbl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.9px;color:var(--h);padding:0 8px;margin-bottom:5px;display:block}
+.nb{display:flex;align-items:center;gap:7px;width:100%;padding:7px 9px;border:none;background:none;border-radius:6px;cursor:pointer;font-size:13px;color:var(--m);text-align:left;font-family:inherit;transition:background .12s,color .12s}
+.nb:hover,.nb.act{background:var(--ab);color:var(--t)}
+.nb.act{font-weight:600}
+.nd{width:6px;height:6px;border-radius:50%;background:var(--bs);flex-shrink:0}
+.nd.on{background:var(--bl)}
+.mn{flex:1;overflow-y:auto;overflow-x:hidden;padding:18px 18px 80px}
+.mts{display:flex;border-bottom:1px solid var(--b);margin-bottom:16px;overflow-x:auto;scrollbar-width:none}
+.mts::-webkit-scrollbar{display:none}
+.mt{padding:8px 13px;font-size:13px;white-space:nowrap;border:none;background:none;cursor:pointer;color:var(--m);border-bottom:2px solid transparent;margin-bottom:-1px;font-family:inherit;flex-shrink:0;transition:color .12s}
+.mt:hover{color:var(--t)}
+.mt.act{color:var(--t);border-bottom-color:var(--t);font-weight:600}
+.tb{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:16px;flex-wrap:wrap}
+.tbt{font-size:17px;font-weight:700;letter-spacing:-.3px}
+.tbs{font-size:12px;color:var(--m);margin-top:2px}
+.vt{display:flex;gap:2px;background:var(--bg);border:1px solid var(--b);border-radius:7px;padding:3px;flex-shrink:0}
+.vb{padding:5px 11px;border-radius:5px;font-size:12px;border:none;background:none;cursor:pointer;color:var(--m);font-family:inherit;font-weight:500;transition:all .12s;white-space:nowrap}
+.vb.act{background:var(--s);color:var(--t);box-shadow:0 1px 3px rgba(0,0,0,.1)}
+.cc{background:var(--s);border:1px solid var(--b);border-radius:12px;margin-bottom:10px;overflow:hidden}
+.cch{padding:12px 15px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;user-select:none;border-bottom:1px solid transparent;transition:border-color .12s}
+.cch.op{border-bottom-color:var(--b)}
+.cct{display:flex;align-items:center;gap:8px;font-size:13.5px;font-weight:700;flex-wrap:wrap}
+.bdg{font-size:11px;padding:2px 7px;border-radius:20px;font-weight:500}
+.bb{background:var(--blb);color:var(--bl)}
+.bg{background:var(--gnb);color:var(--gn)}
+.ba{background:var(--amb);color:var(--am)}
+.ccv{font-size:12px;color:var(--h);transition:transform .2s;flex-shrink:0}
+.ccv.op{transform:rotate(180deg)}
+.ccb{padding:14px;display:none}
+.ccb.op{display:block}
+.sec{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;color:var(--h);margin:14px 0 9px;padding-bottom:7px;border-bottom:1px solid var(--b)}
+.sec:first-child{margin-top:0}
+.fg{display:grid;gap:9px}
+.f2{grid-template-columns:1fr 1fr}
+.f3{grid-template-columns:1fr 1fr 1fr}
+.f4{grid-template-columns:repeat(4,1fr)}
+.fd{display:flex;flex-direction:column;gap:3px}
+.fd label{font-size:11px;color:var(--m);font-weight:500}
+.fd input,.fd textarea{border:1px solid var(--b);border-radius:7px;padding:7px 9px;font-size:13px;background:var(--bg);color:var(--t);font-family:inherit;width:100%;-webkit-appearance:none;transition:border-color .12s,background .12s}
+.fd input:focus,.fd textarea:focus{outline:none;border-color:var(--bs);background:var(--s)}
+.fd textarea{resize:vertical;min-height:68px;line-height:1.5}
+.wr{display:flex;align-items:center;gap:7px;margin-bottom:7px;flex-wrap:wrap}
+.wk{font-size:12.5px;color:var(--m);min-width:148px;font-style:italic;flex-shrink:0}
+.wi{border:1px solid var(--b);border-radius:7px;padding:6px 9px;font-size:13px;background:var(--bg);color:var(--t);font-family:inherit;width:108px;-webkit-appearance:none}
+.wi:focus{outline:none;border-color:var(--bs);background:var(--s)}
+.wu{font-size:11px;color:var(--h)}
+.btn{display:inline-flex;align-items:center;gap:5px;padding:8px 14px;border-radius:7px;font-size:13px;cursor:pointer;border:1px solid var(--b);background:var(--s);color:var(--t);font-family:inherit;font-weight:500;transition:all .12s;white-space:nowrap}
+.btn:hover{background:var(--ab);border-color:var(--bs)}
+.btn:active{transform:scale(.98)}
+.pri{background:var(--t);color:var(--s);border-color:var(--t)}
+.pri:hover{opacity:.82}
+.sm{padding:6px 11px;font-size:12px}
+.bg3{display:flex;gap:7px;flex-wrap:wrap}
+.ppanel{background:var(--s);border:1px solid var(--b);border-radius:12px;margin-top:16px;overflow:hidden;display:none}
+.ppanel-hdr{padding:12px 16px;background:var(--bg);border-bottom:1px solid var(--b);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px}
+.ppta{width:100%;min-height:320px;padding:14px;border:none;font-size:12px;font-family:monospace;line-height:1.75;color:var(--t);background:var(--s);resize:vertical}
+.ppanel-foot{padding:12px 16px;border-top:1px solid var(--b);display:flex;gap:8px;flex-wrap:wrap}
+.sum{border-color:var(--bl);border-width:1.5px}
+.sum .cch{background:var(--blb)}
+.sum .cct{color:var(--bl)}
+.sum .ccv{color:var(--bl)}
+.ov{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:200}
+@media(max-width:768px){
+  .hmb{display:flex;align-items:center;justify-content:center}
+  .hmo{display:none}
+  .sb{position:fixed;top:52px;left:0;bottom:0;z-index:250;transform:translateX(-100%);box-shadow:4px 0 24px rgba(0,0,0,.15)}
+  .sb.op{transform:translateX(0)}
+  .ov.op{display:block}
+  .lay{display:block}
+  .mn{padding:12px 11px 90px;height:calc(100vh - 52px);overflow-y:auto}
+  .f4{grid-template-columns:1fr 1fr}
+  .f3{grid-template-columns:1fr 1fr}
+  .tb{flex-direction:column;gap:9px}
+  .vt{align-self:stretch}
+  .vb{flex:1;text-align:center}
+  .wk{min-width:110px}
+  .bg3{flex-direction:column}
+  .bg3 .btn{justify-content:center}
+}
+@media(max-width:420px){
+  .f4,.f3{grid-template-columns:1fr 1fr}
+  .f2{grid-template-columns:1fr}
+  .ccb{padding:12px}
+  .wk{min-width:0;flex:1}
+  .wi{width:90px}
+}
+@media print{
+  .sb,.hdr,.mts,.bg3,.vt,.hmb,.ov,.ppanel{display:none!important}
+  .mn{height:auto;overflow:visible;padding:0}
+  body,html{overflow:auto;height:auto}
+}
+</style>
+</head>
+<body>
+
+<header class="hdr">
+  <button class="hmb" id="J_hmb">&#9776;</button>
+  <div class="logo">Мониторинг конкурентов</div>
+  <div class="sp"></div>
+  <div class="hmo" id="J_hmo">Февраль 2026</div>
+  <div style="display:flex;gap:6px;flex-shrink:0">
+    <button class="btn sm" id="J_bprompt">&#8599; Промпт</button>
+    <button class="btn sm pri" id="J_breport">Отчёт &#9654;</button>
+  </div>
+</header>
+
+<div class="ov" id="J_ov"></div>
+
+<div class="lay">
+  <nav class="sb" id="J_sb">
+    <div class="sb-sec">
+      <span class="sbl">Конкуренты</span>
+      <button class="nb act" data-nav="checkoffice"><span class="nd on"></span>CheckOffice</button>
+      <button class="nb" data-nav="mdaudit"><span class="nd on"></span>MD Audit</button>
+      <button class="nb" data-nav="sinspector"><span class="nd on"></span>Service Inspector</button>
+      <button class="nb" data-nav="retailiqa"><span class="nd"></span>Ритейлика</button>
+      <button class="nb" data-nav="merasoft"><span class="nd"></span>Мерасофт</button>
+      <button class="nb" data-nav="imredi"><span class="nd on"></span>Imredi</button>
+    </div>
+    <div class="sb-sec">
+      <span class="sbl">Итог</span>
+      <button class="nb" data-nav="summary"><span class="nd" style="background:var(--bl)"></span>Вывод</button>
+    </div>
+    <div class="sb-sec">
+      <span class="sbl">Данные</span>
+      <button class="nb" id="J_bexp">&#11015; Экспорт JSON</button>
+      <button class="nb" id="J_bimp">&#11014; Импорт JSON</button>
+    </div>
+  </nav>
+
+  <main class="mn" id="J_mn">
+    <div class="mts">
+      <button class="mt act" data-m="feb">Февраль 2026</button>
+      <button class="mt" data-m="mar">Март 2026</button>
+      <button class="mt" data-m="apr">Апрель 2026</button>
+      <button class="mt" data-m="may">Май 2026</button>
+      <button class="mt" data-m="jun">Июнь 2026</button>
+    </div>
+
+    <div class="tb">
+      <div>
+        <div class="tbt" id="J_vtitle">Ввод данных — Февраль 2026</div>
+        <div class="tbs">Данные из SpyWords и Вордстата</div>
+      </div>
+      <div class="vt">
+        <button class="vb act" id="J_vi">Ввод данных</button>
+        <button class="vb" id="J_vr">Отчёт</button>
+      </div>
+    </div>
+
+    <!-- INPUT -->
+    <div id="J_iv">
+      <div class="cc" id="cc-checkoffice">
+        <div class="cch op" data-toggle="checkoffice">
+          <div class="cct"><span>CheckOffice</span><span class="bdg bb">checkoffice.ru</span></div>
+          <span class="ccv op">&#9662;</span>
+        </div>
+        <div class="ccb op"><div class="sec">Показатели сайта — Яндекс</div><div class="fg f4"><div class="fd"><label>ТОП-50 Яндекс</label><input type="number" id="co-ya50" placeholder="2010"></div><div class="fd"><label>ТОП-10 Яндекс</label><input type="number" id="co-ya10" placeholder="521"></div><div class="fd"><label>Трафик из поиска</label><input type="number" id="co-yatrf" placeholder="263"></div><div class="fd"><label>Уникальных URL</label><input type="number" id="co-yaurl" placeholder="357"></div></div><div class="sec">Показатели сайта — Google</div><div class="fg f4"><div class="fd"><label>ТОП-50 Google</label><input type="number" id="co-go50" placeholder="3488"></div><div class="fd"><label>ТОП-10 Google</label><input type="number" id="co-go10" placeholder="924"></div><div class="fd"><label>Трафик из поиска</label><input type="number" id="co-gotrf" placeholder="213"></div><div class="fd"><label>Уникальных URL</label><input type="number" id="co-gourl" placeholder="504"></div></div><div class="sec">Вордстат</div><div class="wr"><span class="wk">«check office»</span><input type="number" class="wi" id="ws-co1" placeholder="5716"><span class="wu">пок/мес</span></div><div class="wr"><span class="wk">«чек офис»</span><input type="number" class="wi" id="ws-co2" placeholder="1631"><span class="wu">пок/мес</span></div><div class="wr"><span class="wk">«checkoffice»</span><input type="number" class="wi" id="ws-co3" placeholder="251"><span class="wu">пок/мес</span></div><div class="wr"><span class="wk">«чекофис»</span><input type="number" class="wi" id="ws-co4" placeholder="158"><span class="wu">пок/мес</span></div><div class="sec">Соц. сети</div><div class="fg f3"><div class="fd"><label>Telegram</label><input type="number" id="co-tg" placeholder=""></div><div class="fd"><label>ВКонтакте</label><input type="number" id="co-vk" placeholder=""></div><div class="fd"><label>MAX, другие</label><input type="text" id="co-oth" placeholder=""></div></div><div class="fd" style="margin-top:7px"><label>Описание активности</label><textarea id="co-soc" placeholder="Темы постов, частота..."></textarea></div><div class="sec">Контент (дата | заголовок | URL)</div><div class="fd"><textarea id="co-cnt" placeholder="04.02 | Статья | https://..."></textarea></div><div class="sec">Сторонние ресурсы</div><div class="fd"><textarea id="co-med" placeholder="26.02 | СМИ | Тема | URL"></textarea></div><div class="sec">Email-рассылки</div><div class="fd"><textarea id="co-eml" placeholder="27.02 | Тема | краткое описание"></textarea></div><div class="sec">Мероприятия</div><div class="fd"><textarea id="co-evt" placeholder="05.02 | Вебинар | описание"></textarea></div><div class="sec">Обновления в сервисе</div><div class="fd"><textarea id="co-upd" placeholder="WEB 2.123: ..."></textarea></div><div class="sec">Вакансии</div><div class="fd"><input type="text" id="co-job" placeholder="Нет новых"></div></div>
+      </div>
+      <div class="cc" id="cc-mdaudit">
+        <div class="cch" data-toggle="mdaudit">
+          <div class="cct"><span>MD Audit</span><span class="bdg bb">mdaudit.ru</span></div>
+          <span class="ccv">&#9662;</span>
+        </div>
+        <div class="ccb"><div class="sec">Показатели сайта — Яндекс</div><div class="fg f4"><div class="fd"><label>ТОП-50 Яндекс</label><input type="number" id="md-ya50" placeholder="993"></div><div class="fd"><label>ТОП-10 Яндекс</label><input type="number" id="md-ya10" placeholder="329"></div><div class="fd"><label>Трафик из поиска</label><input type="number" id="md-yatrf" placeholder="254"></div><div class="fd"><label>Уникальных URL</label><input type="number" id="md-yaurl" placeholder="149"></div></div><div class="sec">Показатели сайта — Google</div><div class="fg f4"><div class="fd"><label>ТОП-50 Google</label><input type="number" id="md-go50" placeholder="1114"></div><div class="fd"><label>ТОП-10 Google</label><input type="number" id="md-go10" placeholder="205"></div><div class="fd"><label>Трафик из поиска</label><input type="number" id="md-gotrf" placeholder="71"></div><div class="fd"><label>Уникальных URL</label><input type="number" id="md-gourl" placeholder="182"></div></div><div class="sec">Вордстат</div><div class="wr"><span class="wk">«мд аудит»</span><input type="number" class="wi" id="ws-md1" placeholder="852"><span class="wu">пок/мес</span></div><div class="wr"><span class="wk">«md audit»</span><input type="number" class="wi" id="ws-md2" placeholder="336"><span class="wu">пок/мес</span></div><div class="sec">Соц. сети</div><div class="fg f3"><div class="fd"><label>Telegram</label><input type="number" id="md-tg" placeholder=""></div><div class="fd"><label>ВКонтакте</label><input type="number" id="md-vk" placeholder=""></div><div class="fd"><label>MAX, другие</label><input type="text" id="md-oth" placeholder=""></div></div><div class="fd" style="margin-top:7px"><label>Описание активности</label><textarea id="md-soc" placeholder="Темы постов, частота..."></textarea></div><div class="sec">Контент (дата | заголовок | URL)</div><div class="fd"><textarea id="md-cnt" placeholder="04.02 | Статья | https://..."></textarea></div><div class="sec">Сторонние ресурсы</div><div class="fd"><textarea id="md-med" placeholder="26.02 | СМИ | Тема | URL"></textarea></div><div class="sec">Email-рассылки</div><div class="fd"><textarea id="md-eml" placeholder="27.02 | Тема | краткое описание"></textarea></div><div class="sec">Мероприятия</div><div class="fd"><textarea id="md-evt" placeholder="05.02 | Вебинар | описание"></textarea></div><div class="sec">Обновления в сервисе</div><div class="fd"><textarea id="md-upd" placeholder="WEB 2.123: ..."></textarea></div><div class="sec">Вакансии</div><div class="fd"><input type="text" id="md-job" placeholder="Нет новых"></div></div>
+      </div>
+      <div class="cc" id="cc-sinspector">
+        <div class="cch" data-toggle="sinspector">
+          <div class="cct"><span>Service Inspector</span><span class="bdg bg">serviceinspector.ru</span></div>
+          <span class="ccv">&#9662;</span>
+        </div>
+        <div class="ccb"><div class="sec">Показатели сайта — Яндекс</div><div class="fg f4"><div class="fd"><label>ТОП-50 Яндекс</label><input type="number" id="si-ya50" placeholder="322"></div><div class="fd"><label>ТОП-10 Яндекс</label><input type="number" id="si-ya10" placeholder="62"></div><div class="fd"><label>Трафик из поиска</label><input type="number" id="si-yatrf" placeholder="69"></div><div class="fd"><label>Уникальных URL</label><input type="number" id="si-yaurl" placeholder="92"></div></div><div class="fg f4" style="margin-top:8px"><div class="fd"><label>Запросов в контексте</label><input type="number" id="si-ctx" placeholder="26"></div><div class="fd"><label>Уник. объявлений</label><input type="number" id="si-ads" placeholder="22"></div><div class="fd"><label>CPC (директ)</label><input type="text" id="si-cpc" placeholder="0,3 р."></div><div class="fd"><label>Трафик контекст</label><input type="number" id="si-ctrf" placeholder="0"></div></div><div class="sec">Показатели сайта — Google</div><div class="fg f4"><div class="fd"><label>ТОП-50 Google</label><input type="number" id="si-go50" placeholder="724"></div><div class="fd"><label>ТОП-10 Google</label><input type="number" id="si-go10" placeholder="203"></div><div class="fd"><label>Трафик из поиска</label><input type="number" id="si-gotrf" placeholder="47"></div><div class="fd"><label>Уникальных URL</label><input type="number" id="si-gourl" placeholder="149"></div></div><div class="sec">Вордстат</div><div class="wr"><span class="wk">«сервис инспектор»</span><input type="number" class="wi" id="ws-si1" placeholder="1626"><span class="wu">пок/мес</span></div><div class="wr"><span class="wk">«service inspector»</span><input type="number" class="wi" id="ws-si2" placeholder="828"><span class="wu">пок/мес</span></div><div class="sec">Соц. сети</div><div class="fg f3"><div class="fd"><label>Telegram</label><input type="number" id="si-tg" placeholder=""></div><div class="fd"><label>VC.ru</label><input type="number" id="si-vc" placeholder=""></div><div class="fd"><label>MAX, другие</label><input type="text" id="si-oth" placeholder=""></div></div><div class="fd" style="margin-top:7px"><label>Описание активности</label><textarea id="si-soc" placeholder="Темы постов, частота..."></textarea></div><div class="sec">Контент (дата | заголовок | URL)</div><div class="fd"><textarea id="si-cnt" placeholder="04.02 | Статья | https://..."></textarea></div><div class="sec">Сторонние ресурсы</div><div class="fd"><textarea id="si-med" placeholder="26.02 | СМИ | Тема | URL"></textarea></div><div class="sec">Email-рассылки</div><div class="fd"><textarea id="si-eml" placeholder="27.02 | Тема | краткое описание"></textarea></div><div class="sec">Мероприятия</div><div class="fd"><textarea id="si-evt" placeholder="05.02 | Вебинар | описание"></textarea></div><div class="sec">Обновления в сервисе</div><div class="fd"><textarea id="si-upd" placeholder="WEB 2.123: ..."></textarea></div><div class="sec">Вакансии</div><div class="fd"><input type="text" id="si-job" placeholder="Нет новых"></div></div>
+      </div>
+      <div class="cc" id="cc-retailiqa">
+        <div class="cch" data-toggle="retailiqa">
+          <div class="cct"><span>Ритейлика</span><span class="bdg ba">retailiqa.ru</span></div>
+          <span class="ccv">&#9662;</span>
+        </div>
+        <div class="ccb"><div class="sec">Вордстат</div><div class="wr"><span class="wk">«ритейлика»</span><input type="number" class="wi" id="ws-ri1" placeholder="356"><span class="wu">пок/мес</span></div><div class="sec">Контент</div><div class="fd"><textarea id="ri-cnt" placeholder="Ничего нового"></textarea></div><div class="sec">Соц. сети</div><div class="fg f2"><div class="fd"><label>ВКонтакте</label><input type="number" id="ri-vk" placeholder="68"></div><div class="fd"><label>Активность</label><input type="text" id="ri-act" placeholder="Нет обновлений"></div></div><div class="sec">Обновления / Мероприятия / Вакансии</div><div class="fd"><textarea id="ri-oth" placeholder="Нет активности"></textarea></div></div>
+      </div>
+      <div class="cc" id="cc-merasoft">
+        <div class="cch" data-toggle="merasoft">
+          <div class="cct"><span>Мерасофт</span><span class="bdg bb">mera-soft.ru</span></div>
+          <span class="ccv">&#9662;</span>
+        </div>
+        <div class="ccb"><div class="sec">Показатели сайта — Яндекс</div><div class="fg f4"><div class="fd"><label>ТОП-50 Яндекс</label><input type="number" id="ms-ya50" placeholder="312"></div><div class="fd"><label>ТОП-10 Яндекс</label><input type="number" id="ms-ya10" placeholder="21"></div><div class="fd"><label>Трафик из поиска</label><input type="number" id="ms-yatrf" placeholder="5"></div><div class="fd"><label>Уникальных URL</label><input type="number" id="ms-yaurl" placeholder="56"></div></div><div class="sec">Показатели сайта — Google</div><div class="fg f4"><div class="fd"><label>ТОП-50 Google</label><input type="number" id="ms-go50" placeholder="296"></div><div class="fd"><label>ТОП-10 Google</label><input type="number" id="ms-go10" placeholder="43"></div><div class="fd"><label>Трафик из поиска</label><input type="number" id="ms-gotrf" placeholder="9"></div><div class="fd"><label>Уникальных URL</label><input type="number" id="ms-gourl" placeholder="52"></div></div><div class="sec">Вордстат</div><div class="wr"><span class="wk">«мерасофт»</span><input type="number" class="wi" id="ws-ms1" placeholder="99"><span class="wu">пок/мес</span></div><div class="wr"><span class="wk">«мерасофт чек лист»</span><input type="number" class="wi" id="ws-ms2" placeholder="37"><span class="wu">пок/мес</span></div><div class="sec">Соц. сети</div><div class="fg f2"><div class="fd"><label>ВКонтакте</label><input type="number" id="ms-vk" placeholder="258"></div><div class="fd"><label>Описание</label><input type="text" id="ms-soc" placeholder="Рандомные посты"></div></div><div class="sec">Контент</div><div class="fd"><textarea id="ms-cnt" placeholder="04.02 | Статья | https://..."></textarea></div><div class="sec">Мероприятия / Обновления / Вакансии</div><div class="fd"><textarea id="ms-oth" placeholder="Нет"></textarea></div></div>
+      </div>
+      <div class="cc" id="cc-imredi">
+        <div class="cch" data-toggle="imredi">
+          <div class="cct"><span>Imredi</span><span class="bdg bb">imredi.biz</span></div>
+          <span class="ccv">&#9662;</span>
+        </div>
+        <div class="ccb"><div class="sec">Показатели сайта — Яндекс</div><div class="fg f4"><div class="fd"><label>ТОП-50 Яндекс</label><input type="number" id="im-ya50" placeholder="84"></div><div class="fd"><label>ТОП-10 Яндекс</label><input type="number" id="im-ya10" placeholder="16"></div><div class="fd"><label>Трафик из поиска</label><input type="number" id="im-yatrf" placeholder="50"></div><div class="fd"><label>Уникальных URL</label><input type="number" id="im-yaurl" placeholder="41"></div></div><div class="fg f4" style="margin-top:8px"><div class="fd"><label>Запросов в контексте</label><input type="number" id="im-ctx" placeholder="21"></div><div class="fd"><label>Уник. объявлений</label><input type="number" id="im-ads" placeholder="19"></div><div class="fd"><label>CPC (директ)</label><input type="text" id="im-cpc" placeholder="26 р."></div><div class="fd"><label>Трафик контекст</label><input type="number" id="im-ctrf" placeholder="0"></div></div><div class="sec">Показатели сайта — Google</div><div class="fg f4"><div class="fd"><label>ТОП-50 Google</label><input type="number" id="im-go50" placeholder="491"></div><div class="fd"><label>ТОП-10 Google</label><input type="number" id="im-go10" placeholder="79"></div><div class="fd"><label>Трафик из поиска</label><input type="number" id="im-gotrf" placeholder="40"></div><div class="fd"><label>Уникальных URL</label><input type="number" id="im-gourl" placeholder="92"></div></div><div class="sec">Вордстат</div><div class="wr"><span class="wk">«имреди»</span><input type="number" class="wi" id="ws-im1" placeholder="932"><span class="wu">пок/мес</span></div><div class="wr"><span class="wk">«imredi»</span><input type="number" class="wi" id="ws-im2" placeholder="1289"><span class="wu">пок/мес</span></div><div class="sec">Соц. сети / Активность</div><div class="fd"><input type="text" id="im-soc" placeholder="Нет активных соц. сетей"></div><div class="sec">Контент (дата | заголовок | URL)</div><div class="fd"><textarea id="im-cnt" placeholder="04.02 | Статья | https://..."></textarea></div><div class="sec">Сторонние ресурсы</div><div class="fd"><textarea id="im-med" placeholder="26.02 | СМИ | Тема | URL"></textarea></div><div class="sec">Мероприятия</div><div class="fd"><textarea id="im-evt" placeholder="05.02 | Вебинар | описание"></textarea></div><div class="sec">Обновления в сервисе</div><div class="fd"><textarea id="im-upd" placeholder="WEB 2.123: ..."></textarea></div><div class="sec">Вакансии</div><div class="fd"><input type="text" id="im-job" placeholder="Нет новых"></div></div>
+      </div>
+      <div class="cc sum" id="cc-summary">
+        <div class="cch op" data-toggle="summary">
+          <div class="cct">Вывод и общий анализ</div>
+          <span class="ccv op">&#9662;</span>
+        </div>
+        <div class="ccb op"><div class="sec" style="margin-top:0">Общий вывод за месяц</div><div class="fd"><textarea id="gen-con" style="min-height:80px" placeholder="За февраль..."></textarea></div><div class="sec">Дополнительные наблюдения</div><div class="fd"><textarea id="gen-not" placeholder="MD Audit подтвердило соответствие ФСТЭК..."></textarea></div></div>
+      </div>
+      <div class="bg3" style="margin-top:14px">
+        <button class="btn pri" id="J_breport2">&#9654; Сформировать отчёт</button>
+        <button class="btn" id="J_bsave">&#128190; Сохранить</button>
+        <button class="btn" id="J_bprompt2">&#8599; Промпт для Claude</button>
+      </div>
+    </div>
+
+    <!-- REPORT VIEW -->
+    <div id="J_rv" style="display:none">
+      <div id="J_rc" style="min-height:200px"><div style="text-align:center;padding:50px;color:var(--h)"><div style="font-size:32px;margin-bottom:10px">&#128202;</div><div style="font-size:14px;font-weight:600;color:var(--m)">Нажмите «Отчёт»</div></div></div>
+      <div class="bg3" style="margin-top:14px">
+        <button class="btn pri" id="J_bpdf">&#11015; Скачать / PDF</button>
+        <button class="btn" id="J_bcopy">&#128203; Копировать</button>
+        <button class="btn" id="J_bprompt3">&#8599; Промпт для Claude</button>
+      </div>
+    </div>
+
+    <!-- PROMPT PANEL -->
+    <div class="ppanel" id="J_ppanel">
+      <div class="ppanel-hdr">
+        <div style="font-size:13.5px;font-weight:700">Промпт для Claude</div>
+        <div style="display:flex;gap:7px;flex-wrap:wrap">
+          <button class="btn sm" id="J_bselect">Выделить всё</button>
+          <button class="btn sm" id="J_bcp">Скопировать</button>
+          <button class="btn sm" id="J_bclose">&#10005; Закрыть</button>
+        </div>
+      </div>
+      <textarea class="ppta" id="J_ptxt" readonly></textarea>
+      <div class="ppanel-foot">
+        <button class="btn pri" id="J_bcp2">Скопировать промпт</button>
+        <p style="font-size:12px;color:var(--m);align-self:center">Скопируйте и вставьте в Claude</p>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<input type="file" id="J_fi" accept=".json" style="display:none">
+<script>
+"use strict";
+(function(){
+
+var CM="feb",CV="input";
+var MN={feb:"Февраль 2026",mar:"Март 2026",apr:"Апрель 2026",may:"Май 2026",jun:"Июнь 2026"};
+
+function ge(id){return document.getElementById(id);}
+function qa(s){return document.querySelectorAll(s);}
+function gv(id){var e=ge(id);return e?e.value.trim():"";}
+function nv(id){return parseInt(gv(id))||0;}
+function fn(n){return n>0?n.toLocaleString("ru-RU"):"-";}
+function eh(s){return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
+
+/* CARD */
+function tcv(id){
+  var w=ge("cc-"+id);if(!w)return;
+  var b=w.querySelector(".ccb"),h=w.querySelector(".cch"),a=w.querySelector(".ccv");
+  if(!b)return;
+  var op=b.classList.contains("op");
+  b.classList.toggle("op",!op);
+  if(h)h.classList.toggle("op",!op);
+  if(a)a.classList.toggle("op",!op);
+}
+
+/* SIDEBAR */
+function closeSB(){ge("J_sb").classList.remove("op");ge("J_ov").classList.remove("op");}
+function toggleSB(){
+  if(ge("J_sb").classList.contains("op"))closeSB();
+  else{ge("J_sb").classList.add("op");ge("J_ov").classList.add("op");}
+}
+
+/* NAV */
+function goComp(id){
+  closeSB();
+  if(CV!=="input"){
+    CV="input";
+    ge("J_iv").style.display="block";
+    ge("J_rv").style.display="none";
+    ge("J_ppanel").style.display="none";
+    ge("J_vi").classList.add("act");
+    ge("J_vr").classList.remove("act");
+    updateTitle();
+  }
+  setTimeout(function(){
+    var el=ge("cc-"+id);if(!el)return;
+    el.scrollIntoView({behavior:"smooth",block:"start"});
+    var b=el.querySelector(".ccb");
+    if(b&&!b.classList.contains("op"))tcv(id);
+  },60);
+}
+
+/* MONTH */
+function setMonth(m){
+  saveData();CM=m;
+  ge("J_hmo").textContent=MN[m];
+  qa(".mt").forEach(function(t){t.classList.toggle("act",t.dataset.m===m);});
+  updateTitle();loadData();
+}
+
+/* VIEW */
+function showInput(){
+  CV="input";
+  ge("J_iv").style.display="block";
+  ge("J_rv").style.display="none";
+  ge("J_vi").classList.add("act");
+  ge("J_vr").classList.remove("act");
+  updateTitle();
+}
+function showReport(){
+  CV="report";
+  ge("J_iv").style.display="none";
+  ge("J_rv").style.display="block";
+  ge("J_vi").classList.remove("act");
+  ge("J_vr").classList.add("act");
+  updateTitle();
+  doRender();
+}
+function updateTitle(){
+  var pre=CV==="input"?"Ввод данных — ":"Отчёт — ";
+  ge("J_vtitle").textContent=pre+MN[CM];
+}
+
+/* STORAGE */
+function gather(){
+  var d={};
+  qa("input[id],textarea[id]").forEach(function(e){if(e.id)d[e.id]=e.value;});
+  return d;
+}
+function populate(d){
+  if(!d)return;
+  Object.keys(d).forEach(function(k){
+    var e=ge(k);
+    if(e&&(e.tagName==="INPUT"||e.tagName==="TEXTAREA"))e.value=d[k];
+  });
+}
+function saveData(){
+  try{var a=JSON.parse(localStorage.getItem("cm7")||"{}");a[CM]=gather();localStorage.setItem("cm7",JSON.stringify(a));}catch(x){}
+}
+function loadData(){
+  try{var a=JSON.parse(localStorage.getItem("cm7")||"{}");populate(a[CM]||{});}catch(x){}
+}
+function doExport(){
+  saveData();
+  var b=new Blob([localStorage.getItem("cm7")||"{}"],{type:"application/json"});
+  var a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="monitor-"+CM+".json";a.click();
+}
+function doImport(){ge("J_fi").click();}
+function loadFile(e){
+  var f=e.target.files[0];if(!f)return;
+  var r=new FileReader();
+  r.onload=function(ev){
+    try{localStorage.setItem("cm7",JSON.stringify(JSON.parse(ev.target.result)));loadData();alert("Загружено");}
+    catch(x){alert("Ошибка файла");}
+  };
+  r.readAsText(f);e.target.value="";
+}
+
+/* REPORT */
+function buildReportHTML(){
+  var month=MN[CM];
+  var wsAll=[
+    {l:"«check office»",v:nv("ws-co1")},{l:"«чек офис»",v:nv("ws-co2")},
+    {l:"«сервис инспектор»",v:nv("ws-si1")},{l:"«imredi»",v:nv("ws-im2")},
+    {l:"«имреди»",v:nv("ws-im1")},{l:"«service inspector»",v:nv("ws-si2")},
+    {l:"«мд аудит»",v:nv("ws-md1")},{l:"«ритейлика»",v:nv("ws-ri1")},
+    {l:"«md audit»",v:nv("ws-md2")},{l:"«checkoffice»",v:nv("ws-co3")},
+    {l:"«чекофис»",v:nv("ws-co4")},{l:"«мерасофт»",v:nv("ws-ms1")},
+    {l:"«мерасофт чек лист»",v:nv("ws-ms2")}
+  ].filter(function(x){return x.v>0;}).sort(function(a,b){return b.v-a.v;});
+  var CR=[
+    {n:"CheckOffice",y50:nv("co-ya50"),y10:nv("co-ya10"),g50:nv("co-go50"),g10:nv("co-go10")},
+    {n:"MD Audit",y50:nv("md-ya50"),y10:nv("md-ya10"),g50:nv("md-go50"),g10:nv("md-go10")},
+    {n:"Service Inspector",y50:nv("si-ya50"),y10:nv("si-ya10"),g50:nv("si-go50"),g10:nv("si-go10")},
+    {n:"Мерасофт",y50:nv("ms-ya50"),y10:nv("ms-ya10"),g50:nv("ms-go50"),g10:nv("ms-go10")},
+    {n:"Imredi",y50:nv("im-ya50"),y10:nv("im-ya10"),g50:nv("im-go50"),g10:nv("im-go10")}
+  ];
+  function rank(k){return CR.filter(function(c){return c[k]>0;}).sort(function(a,b){return b[k]-a[k];});}
+  function rkH(arr,k){
+    if(!arr.length)return "<p style='color:#999;font-size:12px'>Нет данных</p>";
+    return "<div>"+arr.map(function(c,i){
+      var bg=i===0?"#faead0":"#f5f5f3";
+      return "<div style='display:flex;justify-content:space-between;padding:5px 9px;border-radius:6px;font-size:12.5px;background:"+bg+";margin-bottom:3px'><span>"+(i+1)+". "+c.n+"</span><span><b>"+c[k].toLocaleString("ru-RU")+"</b></span></div>";
+    }).join("")+"</div>";
+  }
+  function ll(id){
+    var t=gv(id);
+    if(!t)return "<li style='color:#999;font-size:12.5px'>—</li>";
+    return t.split("\n").filter(Boolean).map(function(s){
+      return "<li style='font-size:12.5px;color:#444;margin-bottom:3px'>"+eh(s)+"</li>";
+    }).join("");
+  }
+  function tb(id){
+    var t=gv(id);
+    return t?"<p style='font-size:12.5px;color:#444;line-height:1.65;white-space:pre-wrap'>"+eh(t)+"</p>":"<p style='color:#999;font-size:12.5px'>—</p>";
+  }
+  function cBlock(cfg){
+    var s4="";
+    if(cfg.y50||cfg.y10||cfg.g50||cfg.g10){
+      s4="<div style='display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px'>"
+        +"<div style='background:#f5f5f3;border-radius:7px;padding:8px 10px'><div style='font-size:10px;color:#999;margin-bottom:2px'>ТОП-50 Яндекс</div><div style='font-size:18px;font-weight:700'>"+fn(cfg.y50)+"</div></div>"
+        +"<div style='background:#f5f5f3;border-radius:7px;padding:8px 10px'><div style='font-size:10px;color:#999;margin-bottom:2px'>ТОП-10 Яндекс</div><div style='font-size:18px;font-weight:700'>"+fn(cfg.y10)+"</div></div>"
+        +"<div style='background:#f5f5f3;border-radius:7px;padding:8px 10px'><div style='font-size:10px;color:#999;margin-bottom:2px'>ТОП-50 Google</div><div style='font-size:18px;font-weight:700'>"+fn(cfg.g50)+"</div></div>"
+        +"<div style='background:#f5f5f3;border-radius:7px;padding:8px 10px'><div style='font-size:10px;color:#999;margin-bottom:2px'>ТОП-10 Google</div><div style='font-size:18px;font-weight:700'>"+fn(cfg.g10)+"</div></div>"
+        +"</div>";
+    }
+    var wsR=cfg.ws.map(function(w){var v=nv(w.id);return v>0?"<tr><td style='padding:5px 7px;border:1px solid #e0e0dc'>"+w.l+"</td><td style='text-align:right;padding:5px 7px;border:1px solid #e0e0dc'>"+v.toLocaleString("ru-RU")+"</td></tr>":"";}).join("");
+    var tg=cfg.tgId?gv(cfg.tgId):"",vk=cfg.vkId?gv(cfg.vkId):"";
+    var sl="";
+    if(tg)sl+="Telegram: <b>"+parseInt(tg).toLocaleString("ru-RU")+"</b>";
+    if(tg&&vk)sl+=" &nbsp;&middot;&nbsp; ";
+    if(vk)sl+="ВКонтакте: <b>"+parseInt(vk).toLocaleString("ru-RU")+"</b>";
+    var h="<div style='margin-bottom:24px'>";
+    h+="<div style='font-size:15px;font-weight:700;padding-bottom:8px;border-bottom:2px solid #ddeaf7;margin-bottom:10px;color:#1356a0'>"+cfg.name+" <span style='font-size:11px;font-weight:400;color:#999'>"+cfg.dom+"</span></div>";
+    h+=s4;
+    h+="<div style='font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:#888;margin:10px 0 5px'>Вордстат — бренд трафик</div>";
+    h+=wsR?"<table style='width:100%;max-width:340px;border-collapse:collapse;font-size:12px;margin-bottom:8px'><thead><tr><th style='text-align:left;padding:5px 7px;background:#f5f5f3;border:1px solid #e0e0dc'>Запрос</th><th style='padding:5px 7px;background:#f5f5f3;border:1px solid #e0e0dc'>Показов/мес</th></tr></thead><tbody>"+wsR+"</tbody></table>":"<p style='color:#999;font-size:12px'>Нет данных</p>";
+    h+="<div style='font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:#888;margin:10px 0 5px'>Контент</div><ul style='padding-left:16px;list-style:disc'>"+ll(cfg.cntId)+"</ul>";
+    if(sl)h+="<div style='font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:#888;margin:10px 0 5px'>Соц. сети</div><p style='font-size:12.5px;color:#444;margin-bottom:4px'>"+sl+"</p>";
+    var sd=cfg.sdId?gv(cfg.sdId):"";
+    if(sd)h+="<p style='font-size:12.5px;color:#444;line-height:1.6'>"+eh(sd)+"</p>";
+    if(cfg.medId)h+="<div style='font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:#888;margin:10px 0 5px'>Сторонние ресурсы</div><ul style='padding-left:16px;list-style:disc'>"+ll(cfg.medId)+"</ul>";
+    if(cfg.emlId)h+="<div style='font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:#888;margin:10px 0 5px'>Email-рассылки</div><ul style='padding-left:16px;list-style:disc'>"+ll(cfg.emlId)+"</ul>";
+    if(cfg.evtId)h+="<div style='font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:#888;margin:10px 0 5px'>Мероприятия</div><ul style='padding-left:16px;list-style:disc'>"+ll(cfg.evtId)+"</ul>";
+    if(cfg.updId)h+="<div style='font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:#888;margin:10px 0 5px'>Обновления в сервисе</div>"+tb(cfg.updId);
+    if(cfg.jobId)h+="<div style='font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:#888;margin:10px 0 5px'>Вакансии</div><p style='font-size:12.5px;color:#444'>"+eh(gv(cfg.jobId)||"—")+"</p>";
+    h+="</div>";
+    return h;
+  }
+  var h="<div style='margin-bottom:18px'>"
+    +"<div style='font-size:20px;font-weight:700;letter-spacing:-.4px;margin-bottom:4px'>"+month+" — Мониторинг активности конкурентов</div>"
+    +"<div style='font-size:12px;color:#888'>Сформирован "+new Date().toLocaleDateString("ru-RU",{day:"numeric",month:"long",year:"numeric"})+"</div>"
+    +"</div>";
+  h+=cBlock({name:"CheckOffice",dom:"checkoffice.ru",y50:nv("co-ya50"),y10:nv("co-ya10"),g50:nv("co-go50"),g10:nv("co-go10"),ws:[{id:"ws-co1",l:"«check office»"},{id:"ws-co2",l:"«чек офис»"},{id:"ws-co3",l:"«checkoffice»"},{id:"ws-co4",l:"«чекофис»"}],cntId:"co-cnt",tgId:"co-tg",vkId:"co-vk",sdId:"co-soc",medId:"co-med",emlId:"co-eml",evtId:"co-evt",updId:"co-upd",jobId:"co-job"});
+  h+=cBlock({name:"MD Audit",dom:"mdaudit.ru",y50:nv("md-ya50"),y10:nv("md-ya10"),g50:nv("md-go50"),g10:nv("md-go10"),ws:[{id:"ws-md1",l:"«мд аудит»"},{id:"ws-md2",l:"«md audit»"}],cntId:"md-cnt",tgId:"md-tg",vkId:"md-vk",sdId:"md-soc",medId:"md-med",emlId:"md-eml",evtId:"md-evt",updId:"md-upd",jobId:"md-job"});
+  h+=cBlock({name:"Service Inspector",dom:"serviceinspector.ru",y50:nv("si-ya50"),y10:nv("si-ya10"),g50:nv("si-go50"),g10:nv("si-go10"),ws:[{id:"ws-si1",l:"«сервис инспектор»"},{id:"ws-si2",l:"«service inspector»"}],cntId:"si-cnt",tgId:"si-tg",vkId:null,sdId:"si-soc",medId:"si-med",emlId:"si-eml",evtId:"si-evt",updId:"si-upd",jobId:"si-job"});
+  h+=cBlock({name:"Ритейлика",dom:"retailiqa.ru",y50:0,y10:0,g50:0,g10:0,ws:[{id:"ws-ri1",l:"«ритейлика»"}],cntId:"ri-cnt",tgId:null,vkId:"ri-vk",sdId:null,medId:null,emlId:null,evtId:null,updId:"ri-oth",jobId:null});
+  h+=cBlock({name:"Мерасофт",dom:"mera-soft.ru",y50:nv("ms-ya50"),y10:nv("ms-ya10"),g50:nv("ms-go50"),g10:nv("ms-go10"),ws:[{id:"ws-ms1",l:"«мерасофт»"},{id:"ws-ms2",l:"«мерасофт чек лист»"}],cntId:"ms-cnt",tgId:null,vkId:"ms-vk",sdId:"ms-soc",medId:null,emlId:null,evtId:null,updId:"ms-oth",jobId:null});
+  h+=cBlock({name:"Imredi",dom:"imredi.biz",y50:nv("im-ya50"),y10:nv("im-ya10"),g50:nv("im-go50"),g10:nv("im-go10"),ws:[{id:"ws-im1",l:"«имреди»"},{id:"ws-im2",l:"«imredi»"}],cntId:"im-cnt",tgId:null,vkId:null,sdId:"im-soc",medId:"im-med",emlId:null,evtId:"im-evt",updId:"im-upd",jobId:"im-job"});
+  var conc=gv("gen-con"),notes=gv("gen-not");
+  h+="<div style='border-top:2px solid #e0e0dc;padding-top:20px;margin-top:10px'>";
+  h+="<div style='font-size:20px;font-weight:700;margin-bottom:8px'>Вывод</div>";
+  if(conc)h+="<p style='font-size:13px;color:#444;line-height:1.7;margin-bottom:10px'>"+eh(conc)+"</p>";
+  if(notes)h+="<p style='font-size:13px;color:#444;line-height:1.7;margin-bottom:16px'>"+eh(notes)+"</p>";
+  h+="<div style='font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:#888;margin-bottom:8px'>Бренд трафик (Вордстат) — по убыванию</div>";
+  h+=wsAll.length
+    ?"<table style='width:100%;max-width:380px;border-collapse:collapse;font-size:12px;margin-bottom:16px'><thead><tr><th style='text-align:left;padding:5px 7px;background:#f5f5f3;border:1px solid #e0e0dc'>Запрос</th><th style='padding:5px 7px;background:#f5f5f3;border:1px solid #e0e0dc'>Показов / мес</th></tr></thead><tbody>"
+      +wsAll.map(function(k){return "<tr><td style='padding:5px 7px;border:1px solid #e0e0dc'>"+k.l+"</td><td style='text-align:right;padding:5px 7px;border:1px solid #e0e0dc'>"+k.v.toLocaleString("ru-RU")+"</td></tr>";}).join("")
+      +"</tbody></table>"
+    :"<p style='color:#999;font-size:12px;margin-bottom:12px'>Нет данных</p>";
+  h+="<div style='display:grid;grid-template-columns:1fr 1fr;gap:20px'>";
+  h+="<div><div style='font-size:10px;font-weight:700;text-transform:uppercase;color:#888;margin-bottom:6px'>По запросам в ТОП-50 Яндекс</div>"+rkH(rank("y50"),"y50")
+    +"<div style='font-size:10px;font-weight:700;text-transform:uppercase;color:#888;margin:12px 0 6px'>По запросам в ТОП-10 Яндекс</div>"+rkH(rank("y10"),"y10")+"</div>";
+  h+="<div><div style='font-size:10px;font-weight:700;text-transform:uppercase;color:#888;margin-bottom:6px'>По запросам в ТОП-50 Google</div>"+rkH(rank("g50"),"g50")
+    +"<div style='font-size:10px;font-weight:700;text-transform:uppercase;color:#888;margin:12px 0 6px'>По запросам в ТОП-10 Google</div>"+rkH(rank("g10"),"g10")+"</div>";
+  h+="</div></div>";
+  return h;
+}
+
+function doRender(){saveData();ge("J_rc").innerHTML=buildReportHTML();}
+
+/* PDF */
+function downloadPDF(){
+  saveData();
+  var month=MN[CM];
+  var body=buildReportHTML();
+  var css="body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;font-size:13px;color:#161614;margin:24px 32px;max-width:900px}";
+  var win=window.open("","_blank");
+  if(!win){alert("Разрешите всплывающие окна");return;}
+  win.document.write("<!DOCTYPE html><html lang='ru'><head><meta charset='UTF-8'><title>"+month+"</title><style>"+css+"@media print{body{margin:12mm}@page{margin:15mm}}</style></head><body>"+body+"</body></html>");
+  win.document.close();
+  win.addEventListener("load",function(){win.focus();win.print();});
+}
+
+/* COPY REPORT */
+function copyReport(){
+  navigator.clipboard.writeText(ge("J_rc").innerText).then(function(){
+    var b=ge("J_bcopy");b.textContent="Скопировано!";
+    setTimeout(function(){b.innerHTML="&#128203; Копировать";},2200);
+  });
+}
+
+/* PROMPT */
+function buildPrompt(){
+  var M=MN[CM];
+  var lines=[];
+  lines.push("Ты — маркетинговый аналитик. Составь ежемесячный отчёт мониторинга активности конкурентов за "+M+".");
+  lines.push("");
+  lines.push("ФОРМАТ — точно как в примерах PDF:");
+  lines.push("По каждому конкуренту:");
+  lines.push("  ## [Название] ([домен])");
+  lines.push("  ### Показатели сайта (таблица Яндекс и Google)");
+  lines.push("  ### Вордстат — брендовые запросы");
+  lines.push("  ### Контент (статьи с датами и ссылками)");
+  lines.push("  ### Соц. сети (подписчики + активность)");
+  lines.push("  ### Сторонние ресурсы");
+  lines.push("  ### Email-рассылки");
+  lines.push("  ### Мероприятия");
+  lines.push("  ### Обновления в сервисе");
+  lines.push("  ### Вакансии");
+  lines.push("");
+  lines.push("В конце — ## Вывод:");
+  lines.push("  1. Краткий итог месяца");
+  lines.push("  Бренд трафик по убыванию");
+  lines.push("  ТОП-50/10 Яндекс и Google — рейтинги");
+  lines.push("");
+  lines.push("Если данных нет — пиши: Нет данных.");
+  lines.push("Формат: готовый документ для внутренней Wiki.");
+  lines.push("");
+  lines.push("═══════════════════════════════════");
+  lines.push("ДАННЫЕ ЗА "+M.toUpperCase());
+  lines.push("═══════════════════════════════════");
+  lines.push("");
+  lines.push("## CheckOffice (checkoffice.ru)");
+  lines.push("Яндекс: ТОП-50="+gv("co-ya50")+" ТОП-10="+gv("co-ya10")+" Трафик="+gv("co-yatrf")+" URL="+gv("co-yaurl"));
+  lines.push("Google: ТОП-50="+gv("co-go50")+" ТОП-10="+gv("co-go10")+" Трафик="+gv("co-gotrf")+" URL="+gv("co-gourl"));
+  lines.push("Вордстат: check office="+gv("ws-co1")+" | чек офис="+gv("ws-co2")+" | checkoffice="+gv("ws-co3")+" | чекофис="+gv("ws-co4"));
+  lines.push("TG="+gv("co-tg")+" VK="+gv("co-vk")+" "+gv("co-oth"));
+  lines.push("Активность: "+gv("co-soc"));
+  lines.push("Контент: "+gv("co-cnt"));
+  lines.push("Сторонние: "+gv("co-med"));
+  lines.push("Email: "+gv("co-eml"));
+  lines.push("Мероприятия: "+gv("co-evt"));
+  lines.push("Обновления: "+gv("co-upd"));
+  lines.push("Вакансии: "+gv("co-job"));
+  lines.push("");
+  lines.push("## MD Audit (mdaudit.ru)");
+  lines.push("Яндекс: ТОП-50="+gv("md-ya50")+" ТОП-10="+gv("md-ya10")+" Трафик="+gv("md-yatrf")+" URL="+gv("md-yaurl"));
+  lines.push("Google: ТОП-50="+gv("md-go50")+" ТОП-10="+gv("md-go10")+" Трафик="+gv("md-gotrf")+" URL="+gv("md-gourl"));
+  lines.push("Вордстат: мд аудит="+gv("ws-md1")+" | md audit="+gv("ws-md2"));
+  lines.push("TG="+gv("md-tg")+" VK="+gv("md-vk")+" "+gv("md-oth"));
+  lines.push("Активность: "+gv("md-soc"));
+  lines.push("Контент: "+gv("md-cnt"));
+  lines.push("Сторонние: "+gv("md-med"));
+  lines.push("Email: "+gv("md-eml"));
+  lines.push("Мероприятия: "+gv("md-evt"));
+  lines.push("Обновления: "+gv("md-upd"));
+  lines.push("Вакансии: "+gv("md-job"));
+  lines.push("");
+  lines.push("## Service Inspector (serviceinspector.ru)");
+  lines.push("Яндекс: ТОП-50="+gv("si-ya50")+" ТОП-10="+gv("si-ya10")+" Трафик="+gv("si-yatrf"));
+  lines.push("Директ: запросов="+gv("si-ctx")+" объявл="+gv("si-ads")+" CPC="+gv("si-cpc"));
+  lines.push("Google: ТОП-50="+gv("si-go50")+" ТОП-10="+gv("si-go10"));
+  lines.push("Вордстат: сервис инспектор="+gv("ws-si1")+" | service inspector="+gv("ws-si2"));
+  lines.push("TG="+gv("si-tg")+" VC="+gv("si-vc")+" "+gv("si-oth"));
+  lines.push("Активность: "+gv("si-soc"));
+  lines.push("Контент: "+gv("si-cnt"));
+  lines.push("Сторонние: "+gv("si-med"));
+  lines.push("Email: "+gv("si-eml"));
+  lines.push("Мероприятия: "+gv("si-evt"));
+  lines.push("Обновления: "+gv("si-upd"));
+  lines.push("Вакансии: "+gv("si-job"));
+  lines.push("");
+  lines.push("## Ритейлика (retailiqa.ru)");
+  lines.push("Вордстат: ритейлика="+gv("ws-ri1"));
+  lines.push("VK="+gv("ri-vk")+" "+gv("ri-act"));
+  lines.push("Контент: "+gv("ri-cnt"));
+  lines.push("Прочее: "+gv("ri-oth"));
+  lines.push("");
+  lines.push("## Мерасофт (mera-soft.ru)");
+  lines.push("Яндекс: ТОП-50="+gv("ms-ya50")+" ТОП-10="+gv("ms-ya10")+" Трафик="+gv("ms-yatrf"));
+  lines.push("Google: ТОП-50="+gv("ms-go50")+" ТОП-10="+gv("ms-go10"));
+  lines.push("Вордстат: мерасофт="+gv("ws-ms1")+" | мерасофт чек лист="+gv("ws-ms2"));
+  lines.push("VK="+gv("ms-vk")+" "+gv("ms-soc"));
+  lines.push("Контент: "+gv("ms-cnt"));
+  lines.push("Прочее: "+gv("ms-oth"));
+  lines.push("");
+  lines.push("## Imredi (imredi.biz)");
+  lines.push("Яндекс: ТОП-50="+gv("im-ya50")+" ТОП-10="+gv("im-ya10")+" Трафик="+gv("im-yatrf"));
+  lines.push("Директ: запросов="+gv("im-ctx")+" объявл="+gv("im-ads")+" бюджет="+gv("im-bud"));
+  lines.push("Google: ТОП-50="+gv("im-go50")+" ТОП-10="+gv("im-go10"));
+  lines.push("Вордстат: имреди="+gv("ws-im1")+" | imredi="+gv("ws-im2"));
+  lines.push("Активность: "+gv("im-soc"));
+  lines.push("Контент: "+gv("im-cnt"));
+  lines.push("Сторонние: "+gv("im-med"));
+  lines.push("Мероприятия: "+gv("im-evt"));
+  lines.push("Обновления: "+gv("im-upd"));
+  lines.push("Вакансии: "+gv("im-job"));
+  lines.push("");
+  lines.push("═══════════════════════════════════");
+  lines.push("МОИ НАБЛЮДЕНИЯ:");
+  lines.push(gv("gen-con")||"(не заполнено)");
+  if(gv("gen-not"))lines.push(gv("gen-not"));
+  return lines.join("\n");
+}
+
+function openPrompt(){
+  ge("J_ptxt").value=buildPrompt();
+  ge("J_ppanel").style.display="block";
+  setTimeout(function(){ge("J_ppanel").scrollIntoView({behavior:"smooth",block:"nearest"});},50);
+}
+function closePrompt(){ge("J_ppanel").style.display="none";}
+function copyPrompt(){
+  navigator.clipboard.writeText(ge("J_ptxt").value).then(function(){
+    [ge("J_bcp"),ge("J_bcp2")].forEach(function(b){if(b)b.textContent="Скопировано!";});
+    setTimeout(function(){
+      var b=ge("J_bcp");if(b)b.textContent="Скопировать";
+      var b2=ge("J_bcp2");if(b2)b2.textContent="Скопировать промпт";
+    },2200);
+  });
+}
+function selectAll(){var t=ge("J_ptxt");t.focus();t.select();}
+
+/* INIT */
+window.addEventListener("load",function(){
+  loadData();
+  ge("J_mn").addEventListener("input",function(){clearTimeout(window._as);window._as=setTimeout(saveData,800);});
+  ge("J_hmb").addEventListener("click",toggleSB);
+  ge("J_ov").addEventListener("click",closeSB);
+  qa(".mt").forEach(function(b){b.addEventListener("click",function(){setMonth(this.dataset.m);});});
+  ge("J_vi").addEventListener("click",showInput);
+  ge("J_vr").addEventListener("click",showReport);
+  ge("J_breport").addEventListener("click",showReport);
+  ge("J_breport2").addEventListener("click",showReport);
+  ge("J_bprompt").addEventListener("click",openPrompt);
+  ge("J_bprompt2").addEventListener("click",openPrompt);
+  ge("J_bprompt3").addEventListener("click",openPrompt);
+  ge("J_bpdf").addEventListener("click",downloadPDF);
+  ge("J_bsave").addEventListener("click",saveData);
+  ge("J_bcopy").addEventListener("click",copyReport);
+  ge("J_bcp").addEventListener("click",copyPrompt);
+  ge("J_bcp2").addEventListener("click",copyPrompt);
+  ge("J_bclose").addEventListener("click",closePrompt);
+  ge("J_bselect").addEventListener("click",selectAll);
+  ge("J_bexp").addEventListener("click",doExport);
+  ge("J_bimp").addEventListener("click",doImport);
+  ge("J_fi").addEventListener("change",loadFile);
+  qa("[data-nav]").forEach(function(b){b.addEventListener("click",function(){goComp(this.dataset.nav);});});
+  qa("[data-toggle]").forEach(function(h){h.addEventListener("click",function(){tcv(this.dataset.toggle);});});
+  tcv("checkoffice");
+});
+
+})();
+</script>
+</body>
+</html>
