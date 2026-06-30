@@ -53,9 +53,28 @@ OUT = ROOT / "output"
 REPORTS = OUT / "reports"
 ASSETS = OUT / "assets"
 STATE_FILE = ROOT / "data" / "state.json"
+JOB_FILE  = ROOT / "data" / "current_job.json"
 
 # Хранилище фоновых задач: job_id -> {"status": "running"|"done"|"error", "result": ...}
 JOBS: dict = {}
+
+
+def _read_job_file():
+    """Читает статус задачи из файла (для устойчивости к перезапускам)."""
+    try:
+        if JOB_FILE.exists():
+            return json.loads(JOB_FILE.read_text("utf-8"))
+    except Exception:
+        pass
+    return None
+
+
+def _write_job_file(data):
+    """Сохраняет статус задачи в файл."""
+    try:
+        JOB_FILE.write_text(json.dumps(data, ensure_ascii=False), "utf-8")
+    except Exception:
+        pass
 
 
 COMPETITORS = [
@@ -190,6 +209,14 @@ class CompetitorData:
 def ensure_dirs():
     for path in (ROOT / "data", REPORTS, ASSETS):
         path.mkdir(parents=True, exist_ok=True)
+    # Если после перезапуска задача осталась в статусе "running" — сбрасываем
+    try:
+        job = _read_job_file()
+        if job and job.get("status") == "running":
+            _write_job_file({"status": "error", "step": "Ошибка",
+                             "error": "Сервер перезапустился. Попробуйте ещё раз."})
+    except Exception:
+        pass
 
 # Вызываем сразу при импорте — нужно для gunicorn (main() не вызывается)
 ensure_dirs()
@@ -2788,7 +2815,11 @@ if _flask_ok:
     # ── Статус фоновой задачи ──────────────────────────────────────────────
     @flask_app.route("/api/job/<job_id>")
     def _api_job(job_id):
+        # Сначала проверяем память (самое актуальное)
         job = JOBS.get(job_id)
+        if job is None:
+            # Fallback: читаем из файла (сохраняется между перезапусками)
+            job = _read_job_file()
         if job is None:
             return _fjson({"status": "not_found"}), 404
         return _fjson(job)
@@ -2799,9 +2830,20 @@ if _flask_ok:
         import threading
         payload = _freq.get_json(force=True) or {}
         job_id = "current"
-        JOBS[job_id] = {"status": "running", "step": "Запускаю сбор данных..."}
+        _initial = {"status": "running", "step": "Запускаю сбор данных..."}
+        JOBS[job_id] = _initial
+        _write_job_file(_initial)
 
         def run_job():
+            def _set(d):
+                JOBS[job_id] = d
+                _write_job_file(d)
+            def _update_step(step):
+                cur = dict(JOBS.get(job_id, {}))
+                cur["step"] = step
+                JOBS[job_id] = cur
+                _write_job_file(cur)
+
             try:
                 print(f"[JOB {job_id}] Старт", flush=True)
                 month          = payload.get("month", "jun")
@@ -2814,12 +2856,12 @@ if _flask_ok:
                 state["sources"] = sources
                 write_state(state)
 
-                JOBS[job_id]["step"] = "Собираю данные с сайтов и соцсетей..."
+                _update_step("Собираю данные с сайтов и соцсетей...")
                 print(f"[JOB {job_id}] merge_real_data...", flush=True)
                 items = merge_real_data(month, import_text, sources, manual_metrics, auth)
                 print(f"[JOB {job_id}] merge_real_data готово, рендерю отчёт...", flush=True)
 
-                JOBS[job_id]["step"] = "Формирую отчёт..."
+                _update_step("Формирую отчёт...")
                 stamp     = time.strftime("%Y%m%d-%H%M%S")
                 base      = f"{month}-{stamp}"
                 html_report = render_report_html(month, items)
@@ -2848,18 +2890,18 @@ if _flask_ok:
                 state.setdefault("runs", {})[base] = run_info
                 write_state(state)
 
-                JOBS[job_id] = {
+                _set({
                     "status":   "done",
                     "step":     "Готово!",
                     "report":   run_info,
                     "pdfError": pdf_error,
                     "data":     asdict_data(items),
-                }
+                })
                 print(f"[JOB {job_id}] Готово!", flush=True)
             except Exception as exc:
                 traceback.print_exc()
                 print(f"[JOB {job_id}] ОШИБКА: {exc}", flush=True)
-                JOBS[job_id] = {"status": "error", "step": "Ошибка", "error": str(exc)}
+                _set({"status": "error", "step": "Ошибка", "error": str(exc)})
 
         threading.Thread(target=run_job, daemon=True).start()
         return _fjson({"ok": True, "jobId": job_id})
