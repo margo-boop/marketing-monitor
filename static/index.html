@@ -586,10 +586,56 @@ MD Audit VK 870</div>
       return clean + "?v=" + Date.now();
     }
 
+    function showResult(data) {
+      const report = data.report || {};
+      const htmlUrl = report.html ? reportLink(report.html) : "";
+      const pdfUrl  = report.pdf  ? reportLink(report.pdf)  : "";
+      const jsonUrl = report.json ? reportLink(report.json) : "";
+      const dlName  = `monitoring-${report.month || selectedMonth}-${report.created || Date.now()}.pdf`;
+      const links   = [];
+      if (pdfUrl)  links.push(`<a class="link-button primary" href="${pdfUrl}" download="${dlName}">⬇ Скачать PDF</a>`);
+      if (pdfUrl)  links.push(`<a class="link-button" href="${pdfUrl}" target="_blank" rel="noopener">Открыть PDF</a>`);
+      if (htmlUrl) links.push(`<a class="link-button" href="${htmlUrl}" target="_blank" rel="noopener">Открыть отчёт</a>`);
+      if (jsonUrl) links.push(`<a class="link-button" href="${jsonUrl}" target="_blank" rel="noopener">Данные JSON</a>`);
+      $("resultLinks").innerHTML = links.join("");
+      $("preview").src = htmlUrl || "about:blank";
+      $("result").classList.add("show");
+      $("resultText").textContent = data.pdfError
+        ? "Отчёт HTML собран, но PDF не создался: " + data.pdfError
+        : "Отчёт и PDF собраны.";
+      $("result").scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+
+    async function pollJob(jobId, statusEl) {
+      const dots = [".", "..", "..."];
+      let i = 0;
+      return new Promise((resolve, reject) => {
+        const timer = setInterval(async () => {
+          try {
+            const r = await fetch("/api/job/" + jobId);
+            const job = await r.json();
+            const dot = dots[i++ % dots.length];
+            if (job.status === "running") {
+              statusEl.textContent = (job.step || "Собираю данные") + dot;
+            } else if (job.status === "done") {
+              clearInterval(timer);
+              resolve(job);
+            } else {
+              clearInterval(timer);
+              reject(new Error(job.error || "Неизвестная ошибка"));
+            }
+          } catch (e) {
+            clearInterval(timer);
+            reject(e);
+          }
+        }, 4000);
+      });
+    }
+
     async function run() {
       const status = $("status");
       status.className = "status";
-      status.textContent = "Собираю сайты, Telegram, вставленные цифры и собираю PDF. Это может занять пару минут.";
+      status.textContent = "Запускаю сбор данных...";
       setRunning(true);
 
       try {
@@ -605,31 +651,12 @@ MD Audit VK 870</div>
           })
         });
         const data = await response.json();
-        if (!response.ok || !data.ok) {
-          throw new Error(data.error || "Не удалось собрать отчёт");
-        }
+        if (!response.ok || !data.ok) throw new Error(data.error || "Не удалось запустить сбор");
 
-        const report = data.report || {};
-        const htmlUrl = report.html ? reportLink(report.html) : "";
-        const pdfUrl = report.pdf ? reportLink(report.pdf) : "";
-        const jsonUrl = report.json ? reportLink(report.json) : "";
-        // имя файла для скачивания, например monitoring-jun-20260629-133519.pdf
-        const dlName = `monitoring-${report.month || selectedMonth}-${report.created || Date.now()}.pdf`;
-        const links = [];
-        if (pdfUrl) links.push(`<a class="link-button primary" href="${pdfUrl}" download="${dlName}">⬇ Скачать PDF</a>`);
-        if (pdfUrl) links.push(`<a class="link-button" href="${pdfUrl}" target="_blank" rel="noopener">Открыть PDF</a>`);
-        if (htmlUrl) links.push(`<a class="link-button" href="${htmlUrl}" target="_blank" rel="noopener">Открыть отчёт</a>`);
-        if (jsonUrl) links.push(`<a class="link-button" href="${jsonUrl}" target="_blank" rel="noopener">Данные JSON</a>`);
-
-        $("resultLinks").innerHTML = links.join("");
-        $("preview").src = htmlUrl || "about:blank";
-        $("result").classList.add("show");
-        $("resultText").textContent = data.pdfError
-          ? "Отчёт HTML собран, но PDF не создался: " + data.pdfError
-          : "Отчёт и PDF собраны.";
+        const job = await pollJob(data.jobId, status);
+        showResult(job);
         status.className = "status ok";
-        status.textContent = "Готово. Откройте PDF ниже.";
-        $("result").scrollIntoView({ behavior: "smooth", block: "start" });
+        status.textContent = "Готово! Откройте отчёт ниже.";
       } catch (error) {
         status.className = "status bad";
         status.textContent = "Ошибка: " + error.message;

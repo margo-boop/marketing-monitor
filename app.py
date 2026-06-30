@@ -48,6 +48,9 @@ REPORTS = OUT / "reports"
 ASSETS = OUT / "assets"
 STATE_FILE = ROOT / "data" / "state.json"
 
+# Хранилище фоновых задач: job_id -> {"status": "running"|"done"|"error", "result": ...}
+JOBS: dict = {}
+
 
 COMPETITORS = [
     {
@@ -2814,45 +2817,68 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         try:
             if self.path == "/api/run":
+                import threading, uuid
                 payload = self.read_json()
-                month = payload.get("month", "jun")
-                import_text = payload.get("importText", "")
-                sources = payload.get("sources", {})
-                manual_metrics = payload.get("manualMetrics", {})
-                auth = payload.get("auth", {})
-                state = read_state()
-                state["sources"] = sources
-                write_state(state)
-                items = merge_real_data(month, import_text, sources, manual_metrics, auth)
-                stamp = time.strftime("%Y%m%d-%H%M%S")
-                base = f"{month}-{stamp}"
-                html_report = render_report_html(month, items)
-                html_path = REPORTS / f"{base}.html"
-                pdf_path = REPORTS / f"{base}.pdf"
-                json_path = REPORTS / f"{base}.json"
-                html_path.write_text(html_report, "utf-8")
-                json_path.write_text(json.dumps(asdict_data(items), ensure_ascii=False, indent=2), "utf-8")
-                pdf_error = None
-                try:
-                    render_pdf(month, items, pdf_path)
-                except Exception as exc:
-                    pdf_error = str(exc)
-                state = read_state()
-                state.setdefault("runs", {})[base] = {
-                    "month": month,
-                    "html": str(html_path.relative_to(ROOT)),
-                    "pdf": str(pdf_path.relative_to(ROOT)) if pdf_path.exists() else None,
-                    "json": str(json_path.relative_to(ROOT)),
-                    "created": stamp,
-                }
-                write_state(state)
-                self.send_json({
-                    "ok": True,
-                    "report": state["runs"][base],
-                    "pdfError": pdf_error,
-                    "data": asdict_data(items),
-                })
+                job_id = uuid.uuid4().hex[:12]
+                JOBS[job_id] = {"status": "running", "step": "Запускаю сбор данных..."}
+
+                def run_job():
+                    try:
+                        month        = payload.get("month", "jun")
+                        import_text  = payload.get("importText", "")
+                        sources      = payload.get("sources", {})
+                        manual_metrics = payload.get("manualMetrics", {})
+                        auth         = payload.get("auth", {})
+
+                        state = read_state()
+                        state["sources"] = sources
+                        write_state(state)
+
+                        JOBS[job_id]["step"] = "Собираю данные с сайтов и соцсетей..."
+                        items = merge_real_data(month, import_text, sources, manual_metrics, auth)
+
+                        JOBS[job_id]["step"] = "Формирую отчёт..."
+                        stamp = time.strftime("%Y%m%d-%H%M%S")
+                        base  = f"{month}-{stamp}"
+                        html_report = render_report_html(month, items)
+                        html_path = REPORTS / f"{base}.html"
+                        pdf_path  = REPORTS / f"{base}.pdf"
+                        json_path = REPORTS / f"{base}.json"
+                        html_path.write_text(html_report, "utf-8")
+                        json_path.write_text(json.dumps(asdict_data(items), ensure_ascii=False, indent=2), "utf-8")
+
+                        pdf_error = None
+                        try:
+                            render_pdf(month, items, pdf_path)
+                        except Exception as exc:
+                            pdf_error = str(exc)
+
+                        state = read_state()
+                        run_info = {
+                            "month":   month,
+                            "html":    str(html_path.relative_to(ROOT)),
+                            "pdf":     str(pdf_path.relative_to(ROOT)) if pdf_path.exists() else None,
+                            "json":    str(json_path.relative_to(ROOT)),
+                            "created": stamp,
+                        }
+                        state.setdefault("runs", {})[base] = run_info
+                        write_state(state)
+
+                        JOBS[job_id] = {
+                            "status":   "done",
+                            "step":     "Готово!",
+                            "report":   run_info,
+                            "pdfError": pdf_error,
+                            "data":     asdict_data(items),
+                        }
+                    except Exception as exc:
+                        traceback.print_exc()
+                        JOBS[job_id] = {"status": "error", "step": "Ошибка", "error": str(exc)}
+
+                threading.Thread(target=run_job, daemon=True).start()
+                self.send_json({"ok": True, "jobId": job_id})
                 return
+
             if self.path == "/api/state":
                 self.send_json(read_state())
                 return
@@ -2860,6 +2886,19 @@ class Handler(BaseHTTPRequestHandler):
         except Exception as exc:
             traceback.print_exc()
             self.send_json({"ok": False, "error": str(exc)}, 500)
+
+    def do_GET(self):
+        # /api/job/<id> — статус фоновой задачи
+        if self.path.startswith("/api/job/"):
+            job_id = self.path[len("/api/job/"):]
+            job = JOBS.get(job_id)
+            if job is None:
+                self.send_json({"status": "not_found"}, 404)
+            else:
+                self.send_json(job)
+            return
+        # Остальное — статические файлы (стандартный обработчик)
+        super().do_GET()
 
 
 def main():
