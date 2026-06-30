@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import csv
+import functools
 import hashlib
 import html
 import io
@@ -997,6 +998,7 @@ def extract_visible_date(markup):
     return ""
 
 
+@functools.lru_cache(maxsize=32)
 def parse_sitemap(site_url, timeout=10):
     """Возвращает {url: lastmod} из sitemap.xml / sitemap_index.xml."""
     result = {}
@@ -1962,16 +1964,23 @@ def collect_social_channels(comp, month=None):
 
 def _collect_one(comp, source, month=None):
     """Сетевой сбор по одному конкуренту (выполняется в отдельном потоке)."""
+    from concurrent.futures import ThreadPoolExecutor, as_completed
     comp = dict(comp)
     if source.get("site"):
         comp["site"] = source["site"]
     merged_comp = dict(comp)
     merged_comp["socials"] = {**comp.get("socials", {}), **source.get("socials", {})}
-    site_data = collect_site(merged_comp, month=month)
-    social_channels = collect_social_channels(merged_comp, month=month)
-    web_mentions = collect_web_mentions(merged_comp, month)
 
-    # Собираем обновления: sitemap + Telegram-посты из social_channels
+    # Запускаем три тяжёлые функции параллельно вместо последовательно
+    with ThreadPoolExecutor(max_workers=3) as inner_pool:
+        fut_site    = inner_pool.submit(collect_site,            merged_comp, month)
+        fut_social  = inner_pool.submit(collect_social_channels, merged_comp, month)
+        fut_web     = inner_pool.submit(collect_web_mentions,    merged_comp, month)
+        site_data       = fut_site.result()
+        social_channels = fut_social.result()
+        web_mentions    = fut_web.result()
+
+    # parse_sitemap кэшируется — второй вызов мгновенный (уже выполнен в collect_site)
     tg_posts = []
     for ch in social_channels:
         if ch.get("platform") == "Telegram":
