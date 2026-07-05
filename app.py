@@ -56,6 +56,7 @@ REPORTS = OUT / "reports"
 ASSETS = OUT / "assets"
 STATE_FILE = ROOT / "data" / "state.json"
 JOB_FILE  = ROOT / "data" / "current_job.json"
+LOG_FILE  = ROOT / "data" / "errors.log"
 
 # Хранилище фоновых задач: job_id -> {"status": "running"|"done"|"error", "result": ...}
 JOBS: dict = {}
@@ -78,6 +79,34 @@ def _write_job_file(data):
         JOB_FILE.write_text(json.dumps(data, ensure_ascii=False), "utf-8")
     except Exception:
         pass
+
+
+def log_error(context: str, exc: Exception = None) -> None:
+    """Пишет ошибку в консоль и в data/errors.log."""
+    ts = time.strftime("%Y-%m-%d %H:%M:%S")
+    line = f"[{ts}] {context}"
+    if exc:
+        line += f": {type(exc).__name__}: {exc}"
+    print(line, flush=True)
+    try:
+        LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
+        with LOG_FILE.open("a", encoding="utf-8") as f:
+            f.write(line + "\n")
+            if exc:
+                traceback.print_exc(file=f)
+    except Exception:
+        pass
+
+
+def get_recent_errors(n: int = 20) -> list:
+    """Возвращает последние n строк из errors.log."""
+    try:
+        if LOG_FILE.exists():
+            lines = LOG_FILE.read_text("utf-8").splitlines()
+            return lines[-n:]
+    except Exception:
+        pass
+    return []
 
 
 COMPETITORS = [
@@ -2225,33 +2254,48 @@ def mention_item_html(x):
 
 
 def event_item_html(ev):
-    """Форматирует мероприятие: дата — описание со ссылкой (нумерованный список)."""
+    """Форматирует мероприятие как карточку с датой, заголовком и ссылками."""
     date_str  = format_date(ev.get("lastmod", ""))
     title     = (ev.get("title", "") or "").strip()[:220]
     reg_link  = ev.get("reg_link", "")
     rec_link  = ev.get("rec_link", "")
     url       = ev.get("url", "")
-
-    # Приоритет ссылки: регистрация → запись → источник
     main_link = reg_link or rec_link or url
 
-    # Текст мероприятия со встроенной ссылкой
-    if main_link and title:
-        body = f'<a href="{e(main_link)}" target="_blank" style="color:#1a73e8">{e(title)}</a>'
-    elif title:
-        body = e(title)
-    else:
-        body = ""
-
-    # Дата перед тире
-    prefix = f'<b>{e(date_str)}</b> — ' if date_str else ""
-
-    # Дополнительная ссылка на запись, если есть и отличается от основной
+    date_badge = (
+        f'<span style="font-size:11px;color:#e65100;font-weight:700;'
+        f'background:#fff3e0;padding:2px 7px;border-radius:4px;margin-right:6px">'
+        f'{e(date_str)}</span>'
+        if date_str else ""
+    )
+    title_html = (
+        f'<a href="{e(main_link)}" target="_blank" '
+        f'style="color:#1a1a1a;font-weight:600;font-size:13px;text-decoration:none">'
+        f'{e(title)}</a>'
+        if (main_link and title) else
+        f'<span style="font-weight:600;font-size:13px">{e(title)}</span>'
+        if title else ""
+    )
     extra = ""
     if rec_link and rec_link != main_link:
-        extra = f' <a href="{e(rec_link)}" target="_blank" style="font-size:11px;color:#666">[Запись]</a>'
+        extra = (
+            f'<a href="{e(rec_link)}" target="_blank" '
+            f'style="font-size:11px;color:#1565c0;margin-left:8px">▶ Запись</a>'
+        )
+    reg_btn = ""
+    if reg_link and reg_link == main_link:
+        reg_btn = (
+            f'<a href="{e(reg_link)}" target="_blank" '
+            f'style="font-size:11px;color:#fff;background:#1a73e8;padding:2px 8px;'
+            f'border-radius:4px;text-decoration:none;margin-left:8px">Регистрация</a>'
+        )
 
-    return f'<li style="margin-bottom:8px;line-height:1.5">{prefix}{body}{extra}</li>'
+    return (
+        f'<div style="border:1px solid #fce4d6;border-radius:8px;padding:10px 14px;'
+        f'margin-bottom:8px;background:#fffaf7">'
+        f'<div>{date_badge}{title_html}{reg_btn}{extra}</div>'
+        f'</div>'
+    )
 
 
 def update_block_html(updates):
@@ -2630,7 +2674,7 @@ td.left{text-align:left}
         # ── Мероприятия ──────────────────────────────────────────────
         events_html = "".join(event_item_html(ev) for ev in item.events)
         events_block = (
-            f'<ol style="padding-left:20px;margin:0">{events_html}</ol>'
+            events_html
             if events_html
             else '<p class="empty-note">Анонсов мероприятий не найдено.</p>'
         )
@@ -2962,6 +3006,7 @@ if _flask_ok:
                     render_pdf(month, items, pdf_path)
                 except Exception as exc:
                     pdf_error = str(exc)
+                    log_error("render_pdf", exc)
 
                 state = read_state()
                 run_info = {
@@ -2983,12 +3028,29 @@ if _flask_ok:
                 })
                 print(f"[JOB {job_id}] Готово!", flush=True)
             except Exception as exc:
-                traceback.print_exc()
-                print(f"[JOB {job_id}] ОШИБКА: {exc}", flush=True)
+                log_error(f"[JOB {job_id}] Сбор упал", exc)
                 _set({"status": "error", "step": "Ошибка", "error": str(exc)})
 
         threading.Thread(target=run_job, daemon=True).start()
         return _fjson({"ok": True, "jobId": job_id})
+
+    # ── Статус сервиса ────────────────────────────────────────────────────
+    @flask_app.route("/status")
+    def _api_status():
+        with _JOBS_LOCK:
+            job_status = JOBS.get("current", {}).get("status", "idle")
+            job_step   = JOBS.get("current", {}).get("step", "")
+        state = read_state()
+        runs  = state.get("runs", {})
+        last_run = runs[max(runs)] if runs else None
+        return _fjson({
+            "ok":          True,
+            "time":        time.strftime("%Y-%m-%d %H:%M:%S"),
+            "job_status":  job_status,
+            "job_step":    job_step,
+            "last_run":    last_run,
+            "recent_errors": get_recent_errors(10),
+        })
 
     # ── Состояние (список прошлых отчётов) ────────────────────────────────
     @flask_app.route("/api/state", methods=["POST"])
