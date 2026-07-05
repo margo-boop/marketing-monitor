@@ -6,82 +6,79 @@
   <title>Мониторинг конкурентов</title>
   <style>
     :root {
-      --bg: #f4f5f7;
-      --paper: #ffffff;
-      --line: #e2e4e9;
-      --text: #1a1d23;
-      --muted: #6b7280;
+      --bg: #0f1117;
+      --surface: #1a1d27;
+      --surface-2: #22263a;
+      --border: #2e3248;
+      --text: #e8eaf0;
+      --muted: #7880a0;
       --accent: #4f6ef7;
       --accent-hover: #3a58e0;
-      --ok: #16a34a;
-      --bad: #dc2626;
-      --header-bg: #12141a;
-      --header-text: #f1f2f5;
-      --card-dark: #1e2130;
+      --ok: #22c55e;
+      --ok-dim: rgba(34,197,94,.15);
+      --bad: #ef4444;
+      --bad-dim: rgba(239,68,68,.15);
     }
-    * { box-sizing: border-box; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
-      margin: 0;
       background: var(--bg);
       color: var(--text);
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
       line-height: 1.5;
+      min-height: 100vh;
     }
 
     /* ─── LOGIN ─── */
     #loginScreen {
-      position: fixed;
-      inset: 0;
-      background: #0a0b0f;
+      position: fixed; inset: 0;
+      background: var(--bg);
       display: flex;
       align-items: center;
       justify-content: center;
-      z-index: 1000;
     }
     #loginScreen.hidden { display: none; }
-    .login-card {
-      background: #161820;
-      border: 1px solid #2a2d3a;
-      border-radius: 16px;
-      padding: 40px 36px;
+
+    .login-wrap {
       width: 100%;
-      max-width: 360px;
+      max-width: 340px;
+      padding: 20px;
       text-align: center;
     }
-    .login-icon {
-      font-size: 36px;
-      margin-bottom: 16px;
+    .login-logo {
+      font-size: 40px;
+      margin-bottom: 20px;
+      display: block;
     }
-    .login-title {
-      color: #f1f2f5;
-      font-size: 20px;
+    .login-name {
+      font-size: 19px;
       font-weight: 700;
-      margin: 0 0 6px;
+      color: var(--text);
+      margin-bottom: 4px;
     }
-    .login-sub {
-      color: #8891a5;
-      font-size: 14px;
-      margin: 0 0 24px;
+    .login-hint {
+      font-size: 13px;
+      color: var(--muted);
+      margin-bottom: 28px;
     }
     .login-input {
       width: 100%;
-      background: #0f1016;
-      border: 1px solid #2a2d3a;
+      background: var(--surface);
+      border: 1.5px solid var(--border);
       border-radius: 10px;
-      color: #f1f2f5;
-      font-size: 16px;
+      color: var(--text);
+      font-size: 18px;
+      letter-spacing: 6px;
+      text-align: center;
       padding: 13px 16px;
       outline: none;
-      letter-spacing: 4px;
-      text-align: center;
       font-family: inherit;
-      margin-bottom: 10px;
+      margin-bottom: 8px;
     }
-    .login-input::placeholder { letter-spacing: 0; color: #4a5068; }
+    .login-input::placeholder { letter-spacing: 0; font-size: 14px; color: var(--muted); }
     .login-input:focus { border-color: var(--accent); }
     .login-error {
-      color: #f87171;
       font-size: 13px;
+      color: var(--bad);
       min-height: 18px;
       margin-bottom: 10px;
     }
@@ -91,91 +88,110 @@
       color: #fff;
       border: none;
       border-radius: 10px;
-      font-size: 15px;
-      font-weight: 700;
+      font: 700 15px/1 inherit;
       padding: 14px;
       cursor: pointer;
-      font-family: inherit;
     }
     .btn-login:hover { background: var(--accent-hover); }
 
     /* ─── HEADER ─── */
     header {
-      position: sticky;
-      top: 0;
-      z-index: 10;
       display: flex;
       align-items: center;
+      justify-content: space-between;
       padding: 0 28px;
-      height: 54px;
-      background: var(--header-bg);
-      border-bottom: 1px solid #22253a;
+      height: 52px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
     }
     .brand {
       display: flex;
       align-items: center;
-      gap: 10px;
-      color: var(--header-text);
+      gap: 8px;
+      font-size: 14px;
       font-weight: 700;
-      font-size: 15px;
+      color: var(--text);
     }
     .brand-dot {
-      width: 7px; height: 7px;
+      width: 6px; height: 6px;
       background: var(--accent);
       border-radius: 50%;
     }
+    .header-actions {
+      display: flex;
+      gap: 8px;
+    }
+    .btn-icon {
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--muted);
+      font: inherit;
+      font-size: 14px;
+      padding: 6px 12px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .btn-icon:hover { border-color: var(--accent); color: var(--accent); }
 
     /* ─── MAIN ─── */
     main {
-      max-width: 680px;
+      max-width: 580px;
       margin: 0 auto;
-      padding: 40px 20px 60px;
+      padding: 52px 20px 80px;
     }
 
-    /* ─── CARD ─── */
-    .card {
-      background: var(--paper);
-      border: 1px solid var(--line);
-      border-radius: 16px;
-      padding: 28px;
-      margin-bottom: 14px;
+    /* ─── CENTER BLOCK ─── */
+    .center-label {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 1.2px;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 18px;
+      text-align: center;
     }
-    .card-title {
-      font-size: 22px;
+    .center-title {
+      font-size: 30px;
       font-weight: 800;
-      margin: 0 0 6px;
-      letter-spacing: -.3px;
+      letter-spacing: -.5px;
+      text-align: center;
+      color: var(--text);
+      margin-bottom: 8px;
+      line-height: 1.1;
     }
-    .card-sub {
+    .center-sub {
       font-size: 14px;
       color: var(--muted);
-      margin: 0 0 24px;
+      text-align: center;
+      margin-bottom: 40px;
     }
 
-    /* ─── MONTH ─── */
-    .month-label {
-      font-size: 12px;
+    /* ─── MONTHS ─── */
+    .months-label {
+      font-size: 11px;
       font-weight: 700;
+      letter-spacing: 1px;
       text-transform: uppercase;
-      letter-spacing: .6px;
       color: var(--muted);
-      margin-bottom: 10px;
+      margin-bottom: 12px;
     }
     .month-row {
       display: flex;
       flex-wrap: wrap;
       gap: 8px;
-      margin-bottom: 28px;
+      margin-bottom: 32px;
+      justify-content: center;
     }
     .month {
-      border: 1.5px solid var(--line);
+      border: 1.5px solid var(--border);
       border-radius: 8px;
-      background: var(--bg);
+      background: transparent;
       color: var(--muted);
-      padding: 8px 16px;
-      font: inherit;
-      font-size: 14px;
-      font-weight: 600;
+      font: 600 13px/1 inherit;
+      padding: 9px 16px;
       cursor: pointer;
       transition: all .15s;
     }
@@ -188,432 +204,497 @@
 
     /* ─── RUN BUTTON ─── */
     .btn-run {
+      display: block;
       width: 100%;
       background: var(--accent);
       border: none;
       border-radius: 12px;
       color: #fff;
-      font: inherit;
-      font-size: 16px;
-      font-weight: 700;
-      padding: 16px;
+      font: 700 16px/1 inherit;
+      padding: 18px;
       cursor: pointer;
       transition: background .15s;
-      min-height: 54px;
+      margin-bottom: 16px;
     }
     .btn-run:hover { background: var(--accent-hover); }
-    .btn-run:disabled { opacity: .5; cursor: wait; }
+    .btn-run:disabled { opacity: .45; cursor: wait; }
+
+    /* ─── PROGRESS ─── */
+    .progress-wrap {
+      display: none;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+    .progress-wrap.show { display: flex; }
+    .spinner {
+      width: 16px; height: 16px;
+      border: 2px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin .7s linear infinite;
+      flex-shrink: 0;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .progress-text {
+      font-size: 14px;
+      color: var(--muted);
+      font-weight: 500;
+    }
 
     /* ─── STATUS ─── */
-    .status {
-      margin-top: 14px;
+    .status-msg {
+      text-align: center;
       font-size: 14px;
       font-weight: 600;
-      color: var(--muted);
       min-height: 20px;
-      text-align: center;
+      color: var(--muted);
     }
-    .status.ok { color: var(--ok); }
-    .status.bad { color: var(--bad); }
+    .status-msg.ok { color: var(--ok); }
+    .status-msg.bad { color: var(--bad); }
+
+    /* ─── DIVIDER ─── */
+    .divider {
+      border: none;
+      border-top: 1px solid var(--border);
+      margin: 40px 0;
+    }
 
     /* ─── RESULT ─── */
     .result { display: none; }
     .result.show { display: block; }
-    .result-card {
-      background: var(--card-dark);
-      border-radius: 16px;
-      padding: 24px 28px;
-      margin-bottom: 14px;
+
+    .result-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+    .result-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--ok-dim);
+      color: var(--ok);
+      border: 1px solid rgba(34,197,94,.25);
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 700;
+      padding: 5px 12px;
     }
     .result-title {
-      font-size: 16px;
-      font-weight: 700;
-      color: #f1f2f5;
-      margin: 0 0 4px;
+      font-size: 20px;
+      font-weight: 800;
+      color: var(--text);
     }
     .result-sub {
       font-size: 13px;
-      color: #8891a5;
-      margin: 0 0 18px;
+      color: var(--muted);
+      margin-top: 4px;
     }
-    .actions {
-      display: flex;
-      flex-wrap: wrap;
+
+    .result-files {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
       gap: 10px;
+      margin-top: 20px;
+      margin-bottom: 20px;
     }
-    .link-button {
-      border-radius: 10px;
-      padding: 10px 18px;
-      font-size: 14px;
-      font-weight: 700;
+    .file-card {
+      background: var(--surface);
+      border: 1.5px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
       text-decoration: none;
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      min-height: 40px;
+      display: block;
+      transition: border-color .15s;
     }
-    .link-button.primary {
-      background: var(--accent);
-      color: #fff;
-      border: none;
+    .file-card:hover { border-color: var(--accent); }
+    .file-card.primary { border-color: var(--accent); background: rgba(79,110,247,.1); }
+    .file-icon { font-size: 22px; margin-bottom: 8px; display: block; }
+    .file-label {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text);
+      display: block;
+      margin-bottom: 2px;
     }
-    .link-button.primary:hover { background: var(--accent-hover); }
-    .link-button.secondary {
-      background: rgba(255,255,255,.08);
-      color: #e0e3f0;
-      border: 1px solid rgba(255,255,255,.12);
+    .file-desc {
+      font-size: 11px;
+      color: var(--muted);
     }
-    .link-button.secondary:hover { background: rgba(255,255,255,.14); }
+
     iframe {
       width: 100%;
       min-height: 600px;
-      border: 1px solid var(--line);
+      border: 1px solid var(--border);
       border-radius: 12px;
       background: #fff;
-      margin-top: 14px;
     }
 
-    /* ─── SOURCES COLLAPSIBLE ─── */
-    details.card {
-      padding: 0;
+    /* ─── SETTINGS DRAWER ─── */
+    #settingsDrawer {
+      display: none;
+      margin-top: 32px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
       overflow: hidden;
     }
-    details.card > summary {
-      list-style: none;
-      cursor: pointer;
-      padding: 18px 28px;
-      font-size: 14px;
+    #settingsDrawer.open { display: block; }
+    .drawer-title {
+      font-size: 13px;
       font-weight: 700;
       color: var(--muted);
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      user-select: none;
+      padding: 14px 20px;
+      border-bottom: 1px solid var(--border);
+      text-transform: uppercase;
+      letter-spacing: .6px;
     }
-    details.card > summary::-webkit-details-marker { display: none; }
-    details.card > summary::after {
-      content: "+";
-      font-size: 20px;
-      font-weight: 400;
-    }
-    details[open].card > summary::after { content: "−"; }
-    .details-body {
-      border-top: 1px solid var(--line);
-      padding: 20px 28px;
-    }
-
-    /* ─── COMPETITOR ROWS ─── */
     .competitor {
-      border-top: 1px solid var(--line);
-      padding-top: 16px;
-      margin-top: 16px;
+      border-bottom: 1px solid var(--border);
+      padding: 14px 20px;
     }
-    .competitor:first-child { border-top: 0; padding-top: 0; margin-top: 0; }
-    .competitor-header {
+    .competitor:last-child { border-bottom: none; }
+    .comp-header {
       display: flex;
       justify-content: space-between;
       align-items: center;
       margin-bottom: 10px;
     }
-    .competitor-name { font-weight: 700; font-size: 14px; }
-    .competitor-domain {
-      font-size: 12px;
+    .comp-name { font-size: 13px; font-weight: 700; color: var(--text); }
+    .comp-domain {
+      font-size: 11px;
       color: var(--muted);
-      background: var(--bg);
-      border: 1px solid var(--line);
-      border-radius: 6px;
-      padding: 3px 8px;
-      font-weight: 600;
+      background: var(--surface-2);
+      border-radius: 5px;
+      padding: 2px 7px;
     }
-    .grid {
+    .comp-fields {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 10px;
+      gap: 8px;
     }
-    label {
-      display: block;
-      font-size: 12px;
-      font-weight: 700;
+    .comp-fields label {
+      font-size: 11px;
       color: var(--muted);
+      font-weight: 600;
+      display: block;
       margin-bottom: 4px;
     }
-    input {
+    .comp-fields input {
       width: 100%;
-      border: 1.5px solid var(--line);
-      border-radius: 8px;
-      background: var(--bg);
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 7px;
       color: var(--text);
-      font: inherit;
-      font-size: 13px;
-      padding: 8px 11px;
+      font: 12px/1 inherit;
+      padding: 7px 10px;
       outline: none;
     }
-    input:focus {
-      border-color: var(--accent);
-      background: #fff;
-    }
+    .comp-fields input:focus { border-color: var(--accent); }
 
-    @media (max-width: 600px) {
-      main { padding: 24px 14px 48px; }
-      .card { padding: 22px 18px; }
-      details.card > summary { padding: 16px 18px; }
-      .details-body { padding: 16px 18px; }
-      .grid { grid-template-columns: 1fr; }
+    @media (max-width: 520px) {
+      main { padding: 36px 16px 60px; }
+      .result-files { grid-template-columns: 1fr; }
+      .comp-fields { grid-template-columns: 1fr; }
     }
   </style>
 </head>
 <body>
 
-  <!-- LOGIN -->
-  <div id="loginScreen">
-    <div class="login-card">
-      <div class="login-icon">📊</div>
-      <div class="login-title">Мониторинг конкурентов</div>
-      <div class="login-sub">CheckOffice · внутренний инструмент</div>
-      <input class="login-input" id="passwordInput" type="password" placeholder="Код доступа" autocomplete="current-password">
-      <div class="login-error" id="loginError"></div>
-      <button class="btn-login" id="loginBtn" type="button">Войти</button>
+<!-- ═══ LOGIN ═══ -->
+<div id="loginScreen">
+  <div class="login-wrap">
+    <span class="login-logo">📊</span>
+    <div class="login-name">Мониторинг конкурентов</div>
+    <div class="login-hint">CheckOffice · внутренний инструмент</div>
+    <input class="login-input" id="passwordInput" type="password" placeholder="Код доступа" autocomplete="current-password">
+    <div class="login-error" id="loginError"></div>
+    <button class="btn-login" id="loginBtn" type="button">Войти →</button>
+  </div>
+</div>
+
+<!-- ═══ APP ═══ -->
+<div id="app" style="display:none">
+
+  <header>
+    <div class="brand">
+      <div class="brand-dot"></div>
+      CheckOffice · мониторинг
     </div>
-  </div>
+    <div class="header-actions">
+      <button class="btn-icon" id="settingsBtn" type="button">⚙ Источники</button>
+    </div>
+  </header>
 
-  <!-- APP -->
-  <div id="app" style="display:none">
+  <main>
 
-    <header>
-      <div class="brand">
-        <div class="brand-dot"></div>
-        Мониторинг конкурентов
+    <div class="center-label">Ежемесячный отчёт</div>
+    <div class="center-title">Анализ конкурентов</div>
+    <div class="center-sub">Выберите месяц — данные по сайтам и соцсетям соберутся автоматически</div>
+
+    <div style="text-align:center; margin-bottom:12px" class="months-label">Месяц</div>
+    <div class="month-row" id="months"></div>
+
+    <button class="btn-run" id="mainRun" type="button">Собрать отчёт</button>
+
+    <div class="progress-wrap" id="progressWrap">
+      <div class="spinner"></div>
+      <div class="progress-text" id="progressText">Запускаю...</div>
+    </div>
+
+    <div class="status-msg" id="statusMsg"></div>
+
+    <!-- RESULT -->
+    <section class="result" id="result">
+      <hr class="divider">
+      <div class="result-header">
+        <span class="result-badge">✓ Готово</span>
       </div>
-    </header>
+      <div class="result-title" id="resultTitle">Отчёт собран</div>
+      <div class="result-sub" id="resultText"></div>
 
-    <main>
+      <div class="result-files" id="resultFiles"></div>
 
-      <!-- MAIN CARD -->
-      <div class="card">
-        <div class="card-title">Собрать отчёт</div>
-        <div class="card-sub">Выберите месяц и нажмите кнопку — сайты и соцсети конкурентов соберутся автоматически.</div>
+      <iframe id="preview" title="Предпросмотр"></iframe>
+    </section>
 
-        <div class="month-label">Месяц отчёта</div>
-        <div class="month-row" id="months"></div>
+    <!-- SETTINGS DRAWER -->
+    <div id="settingsDrawer">
+      <div class="drawer-title">Источники конкурентов</div>
+      <div id="sources"></div>
+    </div>
 
-        <button class="btn-run" id="mainRun" type="button">Собрать отчёт</button>
-        <div class="status" id="status"></div>
-      </div>
+  </main>
+</div>
 
-      <!-- RESULT -->
-      <section class="result" id="result">
-        <div class="result-card">
-          <div class="result-title">✓ Отчёт готов</div>
-          <div class="result-sub" id="resultText"></div>
-          <div class="actions" id="resultLinks"></div>
-        </div>
-        <iframe id="preview" title="Предпросмотр отчёта"></iframe>
-      </section>
+<script>
+  // ─── AUTH ───
+  const PASS = "453478";
 
-      <!-- SOURCES (collapsed by default) -->
-      <details class="card">
-        <summary>Настройки источников</summary>
-        <div class="details-body">
-          <p style="font-size:13px; color:var(--muted); margin:0 0 16px">Сайты конкурентов уже заполнены. Добавьте Telegram-канал, если известен.</p>
-          <div id="sources"></div>
-        </div>
-      </details>
-
-    </main>
-  </div>
-
-  <script>
-    // ─── AUTH ───
-    const PASS = "453478";
-
-    function tryLogin() {
-      const val = document.getElementById("passwordInput").value;
-      if (val === PASS) {
-        document.getElementById("loginScreen").classList.add("hidden");
-        document.getElementById("app").style.display = "block";
-        sessionStorage.setItem("mm_auth", "1");
-      } else {
-        document.getElementById("loginError").textContent = "Неверный код. Попробуйте ещё раз.";
-        document.getElementById("passwordInput").value = "";
-        document.getElementById("passwordInput").focus();
-      }
-    }
-
-    document.getElementById("loginBtn").addEventListener("click", tryLogin);
-    document.getElementById("passwordInput").addEventListener("keydown", e => {
-      if (e.key === "Enter") tryLogin();
-    });
-
-    if (sessionStorage.getItem("mm_auth") === "1") {
+  function tryLogin() {
+    const val = document.getElementById("passwordInput").value;
+    if (val === PASS) {
       document.getElementById("loginScreen").classList.add("hidden");
+      document.getElementById("loginScreen").style.display = "none";
       document.getElementById("app").style.display = "block";
+      sessionStorage.setItem("mm_auth", "1");
+    } else {
+      document.getElementById("loginError").textContent = "Неверный код";
+      document.getElementById("passwordInput").value = "";
+      document.getElementById("passwordInput").focus();
     }
+  }
 
-    // ─── DATA ───
-    const MONTHS = [
-      ["feb", "Февраль 2026"],
-      ["mar", "Март 2026"],
-      ["apr", "Апрель 2026"],
-      ["may", "Май 2026"],
-      ["jun", "Июнь 2026"]
-    ];
+  document.getElementById("loginBtn").addEventListener("click", tryLogin);
+  document.getElementById("passwordInput").addEventListener("keydown", e => {
+    if (e.key === "Enter") tryLogin();
+  });
 
-    const COMPETITORS = [
-      { key: "checkoffice",     name: "CheckOffice",       domain: "checkoffice.ru",     site: "https://checkoffice.ru" },
-      { key: "mdaudit",         name: "MD Audit",          domain: "mdaudit.ru",         site: "https://mdaudit.ru" },
-      { key: "serviceinspector",name: "Service Inspector", domain: "serviceinspector.ru",site: "https://serviceinspector.ru" },
-      { key: "retailiqa",       name: "Ритейлика",         domain: "retailiqa.ru",       site: "https://retailiqa.ru" },
-      { key: "merasoft",        name: "Мерасофт",          domain: "mera-soft.ru",       site: "https://mera-soft.ru" },
-      { key: "imredi",          name: "Imredi",            domain: "imredi.biz",         site: "https://imredi.biz" }
-    ];
+  if (sessionStorage.getItem("mm_auth") === "1") {
+    document.getElementById("loginScreen").style.display = "none";
+    document.getElementById("app").style.display = "block";
+  }
 
-    let selectedMonth = "jun";
+  // ─── DATA ───
+  const MONTHS = [
+    ["feb", "Февраль 2026"],
+    ["mar", "Март 2026"],
+    ["apr", "Апрель 2026"],
+    ["may", "Май 2026"],
+    ["jun", "Июнь 2026"]
+  ];
 
-    function $(id) { return document.getElementById(id); }
+  const COMPETITORS = [
+    { key: "checkoffice",     name: "CheckOffice",       domain: "checkoffice.ru",     site: "https://checkoffice.ru" },
+    { key: "mdaudit",         name: "MD Audit",          domain: "mdaudit.ru",         site: "https://mdaudit.ru" },
+    { key: "serviceinspector",name: "Service Inspector", domain: "serviceinspector.ru",site: "https://serviceinspector.ru" },
+    { key: "retailiqa",       name: "Ритейлика",         domain: "retailiqa.ru",       site: "https://retailiqa.ru" },
+    { key: "merasoft",        name: "Мерасофт",          domain: "mera-soft.ru",       site: "https://mera-soft.ru" },
+    { key: "imredi",          name: "Imredi",            domain: "imredi.biz",         site: "https://imredi.biz" }
+  ];
 
-    function drawMonths() {
-      $("months").innerHTML = MONTHS.map(([key, label]) => (
-        `<button type="button" class="month ${key === selectedMonth ? "active" : ""}" data-month="${key}">${label}</button>`
-      )).join("");
-      document.querySelectorAll("[data-month]").forEach(btn => {
-        btn.addEventListener("click", () => {
-          selectedMonth = btn.dataset.month;
-          drawMonths();
-        });
+  let selectedMonth = "jun";
+
+  function $(id) { return document.getElementById(id); }
+
+  // ─── MONTHS ───
+  function drawMonths() {
+    $("months").innerHTML = MONTHS.map(([key, label]) =>
+      `<button type="button" class="month ${key === selectedMonth ? "active" : ""}" data-month="${key}">${label}</button>`
+    ).join("");
+    document.querySelectorAll("[data-month]").forEach(btn => {
+      btn.addEventListener("click", () => {
+        selectedMonth = btn.dataset.month;
+        drawMonths();
       });
-    }
+    });
+  }
 
-    function drawSources() {
-      $("sources").innerHTML = COMPETITORS.map(comp => `
-        <div class="competitor" data-source="${comp.key}">
-          <div class="competitor-header">
-            <span class="competitor-name">${comp.name}</span>
-            <span class="competitor-domain">${comp.domain}</span>
+  // ─── SOURCES ───
+  function drawSources() {
+    $("sources").innerHTML = COMPETITORS.map(comp => `
+      <div class="competitor" data-source="${comp.key}">
+        <div class="comp-header">
+          <span class="comp-name">${comp.name}</span>
+          <span class="comp-domain">${comp.domain}</span>
+        </div>
+        <div class="comp-fields">
+          <div>
+            <label>Сайт</label>
+            <input data-field="site" value="${comp.site}">
           </div>
-          <div class="grid">
-            <div>
-              <label>Сайт</label>
-              <input data-field="site" value="${comp.site}">
-            </div>
-            <div>
-              <label>Telegram</label>
-              <input data-field="telegram" placeholder="@channel">
-            </div>
+          <div>
+            <label>Telegram</label>
+            <input data-field="telegram" placeholder="@channel">
           </div>
         </div>
-      `).join("");
-    }
+      </div>
+    `).join("");
+  }
 
-    function getSources() {
-      const sources = {};
-      document.querySelectorAll("[data-source]").forEach(row => {
-        const key = row.dataset.source;
-        sources[key] = {};
-        row.querySelectorAll("[data-field]").forEach(input => {
-          sources[key][input.dataset.field] = input.value.trim();
-        });
+  // ─── SETTINGS TOGGLE ───
+  $("settingsBtn").addEventListener("click", () => {
+    const drawer = $("settingsDrawer");
+    drawer.classList.toggle("open");
+    $("settingsBtn").textContent = drawer.classList.contains("open") ? "✕ Закрыть" : "⚙ Источники";
+    if (drawer.classList.contains("open")) {
+      drawer.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+  });
+
+  function getSources() {
+    const sources = {};
+    document.querySelectorAll("[data-source]").forEach(row => {
+      const key = row.dataset.source;
+      sources[key] = {};
+      row.querySelectorAll("[data-field]").forEach(input => {
+        sources[key][input.dataset.field] = input.value.trim();
       });
-      return sources;
-    }
+    });
+    return sources;
+  }
 
-    function setRunning(isRunning) {
-      $("mainRun").disabled = isRunning;
-      $("mainRun").textContent = isRunning ? "Собираю данные..." : "Собрать отчёт";
-    }
+  // ─── RUN ───
+  function setRunning(isRunning) {
+    $("mainRun").disabled = isRunning;
+    $("mainRun").style.display = isRunning ? "none" : "block";
+    const pw = $("progressWrap");
+    if (isRunning) pw.classList.add("show"); else pw.classList.remove("show");
+  }
 
-    function reportLink(path) {
-      return "/" + path.replace(/^\/+/, "") + "?v=" + Date.now();
-    }
+  function reportLink(path) {
+    return "/" + path.replace(/^\/+/, "") + "?v=" + Date.now();
+  }
 
-    function showResult(data) {
-      const report  = data.report || {};
-      const htmlUrl = report.html ? reportLink(report.html) : "";
-      const pdfUrl  = report.pdf  ? reportLink(report.pdf)  : "";
-      const jsonUrl = report.json ? reportLink(report.json) : "";
-      const dlName  = `monitoring-${report.month || selectedMonth}-${report.created || Date.now()}.pdf`;
-      const links   = [];
-      if (pdfUrl)  links.push(`<a class="link-button primary" href="${pdfUrl}" download="${dlName}">⬇ Скачать PDF</a>`);
-      if (pdfUrl)  links.push(`<a class="link-button secondary" href="${pdfUrl}" target="_blank" rel="noopener">Открыть PDF</a>`);
-      if (htmlUrl) links.push(`<a class="link-button secondary" href="${htmlUrl}" target="_blank" rel="noopener">Открыть отчёт</a>`);
-      if (jsonUrl) links.push(`<a class="link-button secondary" href="${jsonUrl}" target="_blank" rel="noopener">JSON</a>`);
-      $("resultLinks").innerHTML = links.join("");
-      $("preview").src = htmlUrl || "about:blank";
-      $("result").classList.add("show");
-      $("resultText").textContent = data.pdfError
-        ? "HTML собран, PDF не создался: " + data.pdfError
-        : "Отчёт и PDF готовы.";
-      $("result").scrollIntoView({ behavior: "smooth", block: "start" });
-    }
+  function showResult(data) {
+    const report  = data.report || {};
+    const htmlUrl = report.html ? reportLink(report.html) : "";
+    const pdfUrl  = report.pdf  ? reportLink(report.pdf)  : "";
+    const jsonUrl = report.json ? reportLink(report.json) : "";
+    const dlName  = `monitoring-${report.month || selectedMonth}-${report.created || Date.now()}.pdf`;
 
-    async function pollJob(statusEl) {
-      const dots = [".", "..", "..."];
-      let i = 0, waited = 0;
-      const MAX_WAIT = 600000;
-      return new Promise((resolve, reject) => {
-        const timer = setInterval(async () => {
-          const dot = dots[i++ % dots.length];
-          waited += 4000;
-          try {
-            const r = await fetch("/api/job/current");
-            let job;
-            try { job = await r.json(); } catch (_) {
-              statusEl.textContent = "Сервер запускается" + dot;
-              return;
-            }
-            if (job.status === "running") {
-              statusEl.textContent = (job.step || "Собираю данные") + dot;
-            } else if (job.status === "done") {
-              clearInterval(timer); resolve(job);
-            } else if ((job.status === "not_found" || r.status === 404) && waited < 30000) {
-              statusEl.textContent = "Запускаю сбор" + dot;
-            } else if (job.status === "error") {
-              clearInterval(timer); reject(new Error(job.error || "Ошибка сбора данных"));
-            } else if (waited >= MAX_WAIT) {
-              clearInterval(timer); reject(new Error("Превышено время ожидания."));
-            } else {
-              clearInterval(timer); reject(new Error("Задача не запустилась."));
-            }
-          } catch (e) {
-            if (waited < 60000) { statusEl.textContent = "Подключаюсь к серверу" + dot; }
-            else { clearInterval(timer); reject(e); }
+    const files = [];
+    if (pdfUrl) files.push(`
+      <a class="file-card primary" href="${pdfUrl}" download="${dlName}">
+        <span class="file-icon">📥</span>
+        <span class="file-label">Скачать PDF</span>
+        <span class="file-desc">Для отправки</span>
+      </a>`);
+    if (htmlUrl) files.push(`
+      <a class="file-card" href="${htmlUrl}" target="_blank" rel="noopener">
+        <span class="file-icon">🌐</span>
+        <span class="file-label">Открыть отчёт</span>
+        <span class="file-desc">В браузере</span>
+      </a>`);
+    if (jsonUrl) files.push(`
+      <a class="file-card" href="${jsonUrl}" target="_blank" rel="noopener">
+        <span class="file-icon">📊</span>
+        <span class="file-label">Данные JSON</span>
+        <span class="file-desc">Сырые цифры</span>
+      </a>`);
+
+    $("resultFiles").innerHTML = files.join("");
+    $("resultText").textContent = data.pdfError
+      ? "HTML готов, PDF не создался: " + data.pdfError
+      : "Отчёт и PDF готовы";
+    $("preview").src = htmlUrl || "about:blank";
+    $("result").classList.add("show");
+    $("result").scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  async function pollJob(textEl) {
+    const dots = [".", "..", "..."];
+    let i = 0, waited = 0;
+    const MAX = 600000;
+    return new Promise((resolve, reject) => {
+      const timer = setInterval(async () => {
+        const dot = dots[i++ % dots.length];
+        waited += 4000;
+        try {
+          const r = await fetch("/api/job/current");
+          let job;
+          try { job = await r.json(); } catch (_) {
+            textEl.textContent = "Сервер запускается" + dot; return;
           }
-        }, 4000);
-      });
+          if (job.status === "running") {
+            textEl.textContent = (job.step || "Собираю данные") + dot;
+          } else if (job.status === "done") {
+            clearInterval(timer); resolve(job);
+          } else if ((job.status === "not_found" || r.status === 404) && waited < 30000) {
+            textEl.textContent = "Запускаю сбор" + dot;
+          } else if (job.status === "error") {
+            clearInterval(timer); reject(new Error(job.error || "Ошибка"));
+          } else if (waited >= MAX) {
+            clearInterval(timer); reject(new Error("Превышено время ожидания"));
+          } else {
+            clearInterval(timer); reject(new Error("Задача не запустилась"));
+          }
+        } catch (e) {
+          if (waited < 60000) textEl.textContent = "Подключаюсь" + dot;
+          else { clearInterval(timer); reject(e); }
+        }
+      }, 4000);
+    });
+  }
+
+  async function run() {
+    $("statusMsg").className = "status-msg";
+    $("statusMsg").textContent = "";
+    $("result").classList.remove("show");
+    setRunning(true);
+    $("progressText").textContent = "Запускаю...";
+
+    try {
+      fetch("/api/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          month: selectedMonth,
+          sources: getSources(),
+          importText: "",
+          manualMetrics: {},
+          auth: {}
+        })
+      }).catch(() => {});
+
+      const job = await pollJob($("progressText"));
+      showResult(job);
+      $("statusMsg").className = "status-msg ok";
+      $("statusMsg").textContent = "Готово";
+    } catch (err) {
+      $("statusMsg").className = "status-msg bad";
+      $("statusMsg").textContent = "Ошибка: " + err.message;
+    } finally {
+      setRunning(false);
     }
+  }
 
-    async function run() {
-      const status = $("status");
-      status.className = "status";
-      status.textContent = "Запускаю...";
-      setRunning(true);
-      try {
-        fetch("/api/run", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            month: selectedMonth,
-            sources: getSources(),
-            importText: "",
-            manualMetrics: {},
-            auth: {}
-          })
-        }).catch(() => {});
-
-        const job = await pollJob(status);
-        showResult(job);
-        status.className = "status ok";
-        status.textContent = "Готово!";
-      } catch (error) {
-        status.className = "status bad";
-        status.textContent = "Ошибка: " + error.message;
-      } finally {
-        setRunning(false);
-      }
-    }
-
-    drawMonths();
-    drawSources();
-    $("mainRun").addEventListener("click", run);
-  </script>
+  drawMonths();
+  drawSources();
+  $("mainRun").addEventListener("click", run);
+</script>
 </body>
 </html>
