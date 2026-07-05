@@ -109,6 +109,23 @@ def get_recent_errors(n: int = 20) -> list:
     return []
 
 
+def notify_telegram(message: str) -> None:
+    """Отправляет сообщение в Telegram-чат (нужны TG_BOT_TOKEN и TG_CHAT_ID в env)."""
+    import urllib.request as _ur
+    import json as _json
+    token = os.environ.get("TG_BOT_TOKEN", "")
+    chat_id = os.environ.get("TG_CHAT_ID", "")
+    if not token or not chat_id:
+        return
+    try:
+        url = f"https://api.telegram.org/bot{token}/sendMessage"
+        payload = _json.dumps({"chat_id": chat_id, "text": message, "parse_mode": "HTML"}).encode()
+        req = _ur.Request(url, data=payload, headers={"Content-Type": "application/json"})
+        _ur.urlopen(req, timeout=10)
+    except Exception as exc:
+        log_error("notify_telegram", exc)
+
+
 COMPETITORS = [
     {
         "key": "checkoffice",
@@ -827,8 +844,8 @@ def collect_web_mentions(comp, month):
                 pub   = parse_rss_date(d.group(1)) if d else ""
                 snip  = clean_text(re.sub(r"<[^>]+>", " ", desc.group(1)))[:300] if desc else ""
                 add({"title": title, "url": link, "lastmod": pub, "snippet": snip})
-        except Exception:
-            pass
+        except Exception as exc:
+            log_error(f"[web_mentions] Google News query={query}", exc)
 
     # ── 2. Яндекс.Новости RSS ─────────────────────────────────────────────
     for query in queries[:2]:
@@ -848,8 +865,8 @@ def collect_web_mentions(comp, month):
                 pub   = parse_rss_date(d.group(1)) if d else ""
                 snip  = clean_text(re.sub(r"<[^>]+>", " ", desc.group(1)))[:300] if desc else ""
                 add({"title": title, "url": link, "lastmod": pub, "snippet": snip})
-        except Exception:
-            pass
+        except Exception as exc:
+            log_error(f"[web_mentions] Yandex News query={query}", exc)
 
     # ── 3. Прямой поиск на отраслевых сайтах ─────────────────────────────
     INDUSTRY_SITES = [
@@ -940,8 +957,8 @@ def collect_web_mentions(comp, month):
                 pub   = parse_rss_date(d.group(1)) if d else ""
                 snip  = clean_text(re.sub(r"<[^>]+>", " ", desc.group(1)))[:300] if desc else ""
                 add({"title": title, "url": link, "lastmod": pub, "snippet": snip})
-        except Exception:
-            pass
+        except Exception as exc:
+            log_error(f"[web_mentions] events query={suffix}", exc)
 
     return results[:40]
 
@@ -2073,7 +2090,7 @@ def merge_real_data(month, import_text, sources, manual_metrics=None, auth=None,
                 results_map[comp["key"]] = fut.result()
             except Exception as exc:
                 results_map[comp["key"]] = (comp, {}, [], [], [])
-                print(f"[collect_one] {comp['name']} ошибка: {exc}", flush=True)
+                log_error(f"[collect_one] {comp['name']}", exc)
             done += 1
             if on_progress:
                 try:
@@ -3030,6 +3047,7 @@ if _flask_ok:
             except Exception as exc:
                 log_error(f"[JOB {job_id}] Сбор упал", exc)
                 _set({"status": "error", "step": "Ошибка", "error": str(exc)})
+                notify_telegram(f"⚠️ <b>marketing-monitor</b>: сбор за {month} упал\n<code>{type(exc).__name__}: {exc}</code>")
 
         threading.Thread(target=run_job, daemon=True).start()
         return _fjson({"ok": True, "jobId": job_id})
@@ -3053,7 +3071,7 @@ if _flask_ok:
         })
 
     # ── Состояние (список прошлых отчётов) ────────────────────────────────
-    @flask_app.route("/api/state", methods=["POST"])
+    @flask_app.route("/api/state", methods=["GET", "POST"])
     def _api_state():
         return _fjson(read_state())
 

@@ -461,6 +461,16 @@
       <iframe id="preview" title="Предпросмотр"></iframe>
     </section>
 
+    <!-- HISTORY -->
+    <div id="historySection" style="display:none">
+      <hr class="divider">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+        <div style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--muted)">Прошлые отчёты</div>
+        <button class="btn-icon" id="refreshHistory" type="button" style="font-size:12px">↻ Обновить</button>
+      </div>
+      <div id="historyList"></div>
+    </div>
+
     <!-- SETTINGS DRAWER -->
     <div id="settingsDrawer">
       <div class="drawer-title">Источники конкурентов</div>
@@ -698,9 +708,66 @@
     }
   }
 
+  // ── HISTORY ──────────────────────────────────────────────
+  function fmtCreated(ts) {
+    // ts is like "20260706-120000"
+    if (!ts || ts.length < 15) return ts || "";
+    const d = ts.slice(0,4)+"-"+ts.slice(4,6)+"-"+ts.slice(6,8);
+    const t = ts.slice(9,11)+":"+ts.slice(11,13);
+    return d + " " + t;
+  }
+
+  function fmtMonth(m) {
+    const names = {jan:"Янв",feb:"Фев",mar:"Март",apr:"Апр",may:"Май",jun:"Июнь",
+                   jul:"Июль",aug:"Авг",sep:"Сен",oct:"Окт",nov:"Ноя",dec:"Дек"};
+    return names[m] || m;
+  }
+
+  async function loadHistory() {
+    const sec = $("historySection");
+    const list = $("historyList");
+    try {
+      const r = await fetch("/api/state");
+      if (!r.ok) return;
+      const data = await r.json();
+      const runs = data.runs || {};
+      const keys = Object.keys(runs).sort().reverse();
+      if (keys.length === 0) return;
+      sec.style.display = "";
+      list.innerHTML = "";
+      keys.forEach(key => {
+        const run = runs[key];
+        const row = document.createElement("div");
+        row.style.cssText = "display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)";
+        const label = document.createElement("div");
+        label.style.cssText = "flex:1;min-width:0";
+        label.innerHTML = `<span style="font-weight:600;color:var(--text)">${fmtMonth(run.month)}</span>
+          <span style="color:var(--muted);font-size:12px;margin-left:8px">${fmtCreated(run.created)}</span>`;
+        row.appendChild(label);
+        const btns = document.createElement("div");
+        btns.style.cssText = "display:flex;gap:6px;flex-shrink:0";
+        [["PDF","pdf","#c084fc"],["HTML","html","#60a5fa"],["JSON","json","#34d399"]].forEach(([label,type,color])=>{
+          if (!run[type]) return;
+          const a = document.createElement("a");
+          a.href = "/output/reports/" + run[type].split("/").pop();
+          a.target = "_blank";
+          a.textContent = label;
+          a.style.cssText = `font-size:11px;font-weight:700;padding:3px 9px;border-radius:4px;background:${color}22;color:${color};border:1px solid ${color}44;text-decoration:none;letter-spacing:.3px`;
+          btns.appendChild(a);
+        });
+        row.appendChild(btns);
+        list.appendChild(row);
+      });
+    } catch(e) {
+      // silently ignore — history is optional
+    }
+  }
+
   drawMonths();
   drawSources();
   $("mainRun").addEventListener("click", run);
+  $("refreshHistory").addEventListener("click", loadHistory);
+  loadHistory();
 </script>
 </body>
 </html>
