@@ -10,6 +10,7 @@ import re
 import ssl
 import struct
 import sys
+import threading
 import time
 import traceback
 import urllib.error
@@ -58,6 +59,7 @@ JOB_FILE  = ROOT / "data" / "current_job.json"
 
 # Хранилище фоновых задач: job_id -> {"status": "running"|"done"|"error", "result": ...}
 JOBS: dict = {}
+_JOBS_LOCK = threading.Lock()
 
 
 def _read_job_file():
@@ -294,6 +296,12 @@ def request_text(url, timeout=12, extra_headers=None):
         headers=headers,
     )
     with urlopen_with_ssl_fallback(req, timeout=timeout) as resp:
+        ct_header = resp.headers.get("Content-Type", "")
+        ct_base = ct_header.lower().split(";")[0].strip()
+        _BINARY = ("image/", "application/pdf", "application/zip",
+                   "application/octet-stream", "audio/", "video/")
+        if ct_base and any(ct_base.startswith(b) for b in _BINARY):
+            raise ValueError(f"Пропуск бинарного контента ({ct_base}): {url}")
         raw = resp.read(2_500_000)
         ctype = resp.headers.get_content_charset() or "utf-8"
     return raw.decode(ctype, errors="replace")
@@ -832,9 +840,31 @@ def collect_web_mentions(comp, month):
         r"хабы|компании|пользователи|авторы|все темы|написать|новый пост)$",
         re.I | re.U,
     )
-    for site_name, search_url in INDUSTRY_SITES:
+    # Параллельно загружаем страницы всех отраслевых сайтов
+    def _fetch_industry_page(args):
+        _, search_url = args
         try:
-            page = request_text(search_url, timeout=10)
+            return search_url, request_text(search_url, timeout=10)
+        except Exception:
+            return search_url, None
+
+    from concurrent.futures import ThreadPoolExecutor as _TPE, as_completed as _ac
+    _pages = {}
+    with _TPE(max_workers=5) as _pool:
+        _futs = {_pool.submit(_fetch_industry_page, item): item for item in INDUSTRY_SITES}
+        for _fut in _ac(_futs, timeout=35):
+            try:
+                _url, _html = _fut.result()
+                if _html:
+                    _pages[_url] = _html
+            except Exception:
+                pass
+
+    for site_name, search_url in INDUSTRY_SITES:
+        page = _pages.get(search_url)
+        if not page:
+            continue
+        try:
             for m in re.finditer(r'<a\s+[^>]*href=["\']([^"\']+)["\'][^>]*>(.*?)</a>', page, re.I | re.S):
                 href = abs_url(m.group(1), search_url)
                 text = clean_text(re.sub(r"<[^>]+>", " ", m.group(2)))
@@ -852,7 +882,7 @@ def collect_web_mentions(comp, month):
                 # Служебные пути — пропускаем
                 if re.search(r"/search|/tag|/author|/category|/page|/sandbox|/hub|/user", href, re.I):
                     continue
-                # Заголовок ДОЛЖЕН содержать упоминание компании (убрали fallback)
+                # Заголовок ДОЛЖЕН содержать упоминание компании
                 comp_check = any(
                     q.lower() in text.lower() or q.lower() in href.lower()
                     for q in [comp["name"]] + comp.get("queries", [])
@@ -2845,16 +2875,20 @@ if _flask_ok:
 
         def run_job():
             def _set(d):
-                JOBS[job_id] = d
+                with _JOBS_LOCK:
+                    JOBS[job_id] = d
                 _write_job_file(d)
             def _update_step(step):
-                cur = dict(JOBS.get(job_id, {}))
-                cur["step"] = step
-                JOBS[job_id] = cur
+                with _JOBS_LOCK:
+                    cur = dict(JOBS.get(job_id, {}))
+                    cur["step"] = step
+                    JOBS[job_id] = cur
                 _write_job_file(cur)
 
             try:
                 print(f"[JOB {job_id}] Старт", flush=True)
+                # Сбрасываем кеш sitemap — иначе данные прошлого запуска попадут в новый
+                parse_sitemap.cache_clear()
                 month          = payload.get("month", "jun")
                 import_text    = payload.get("importText", "")
                 sources        = payload.get("sources", {})
@@ -2867,7 +2901,14 @@ if _flask_ok:
 
                 _update_step("Собираю данные с сайтов и соцсетей...")
                 print(f"[JOB {job_id}] merge_real_data...", flush=True)
-                items = merge_real_data(month, import_text, sources, manual_metrics, auth)
+                import concurrent.futures as _cf
+                with _cf.ThreadPoolExecutor(max_workers=1) as _exc:
+                    _fut = _exc.submit(merge_real_data, month, import_text, sources, manual_metrics, auth)
+                    try:
+                        items = _fut.result(timeout=480)  # 8 минут максимум
+                    except _cf.TimeoutError:
+                        _fut.cancel()
+                        raise RuntimeError("Сбор занял более 8 минут и был прерван. Попробуйте ещё раз.")
                 print(f"[JOB {job_id}] merge_real_data готово, рендерю отчёт...", flush=True)
 
                 _update_step("Формирую отчёт...")
