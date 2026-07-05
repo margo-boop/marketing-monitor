@@ -509,8 +509,8 @@
 
   const COMPETITORS = [
     { key: "checkoffice",     name: "CheckOffice",       domain: "checkoffice.ru",     site: "https://checkoffice.ru" },
-    { key: "mdaudit",         name: "MD Audit",          domain: "mdaudit.ru",         site: "https://mdaudit.ru" },
-    { key: "serviceinspector",name: "Service Inspector", domain: "serviceinspector.ru",site: "https://serviceinspector.ru" },
+    { key: "mdaudit",         name: "MD Audit",          domain: "mdaudit.ru",         site: "https://mdaudit.ru",         telegram: "@mdaudit" },
+    { key: "serviceinspector",name: "Service Inspector", domain: "serviceinspector.ru",site: "https://serviceinspector.ru", telegram: "@SI_chanel" },
     { key: "retailiqa",       name: "Ритейлика",         domain: "retailiqa.ru",       site: "https://retailiqa.ru" },
     { key: "merasoft",        name: "Мерасофт",          domain: "mera-soft.ru",       site: "https://mera-soft.ru" },
     { key: "imredi",          name: "Imredi",            domain: "imredi.biz",         site: "https://imredi.biz" }
@@ -548,7 +548,7 @@
           </div>
           <div>
             <label>Telegram</label>
-            <input data-field="telegram" placeholder="@channel">
+            <input data-field="telegram" value="${comp.telegram || ''}" placeholder="@channel">
           </div>
         </div>
       </div>
