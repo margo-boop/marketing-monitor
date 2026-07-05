@@ -1158,6 +1158,7 @@ def collect_site(comp, month=None):
 
         sitemap = parse_sitemap(comp["site"])
         sitemap_content = []
+        _sitemap_unknown = []  # URL без даты — проверим параллельно
         for url, lastmod in sitemap.items():
             path = urllib.parse.urlparse(url).path.strip("/")
 
@@ -1187,97 +1188,149 @@ def collect_site(comp, month=None):
             if check is True:
                 sitemap_content.append(item)
             elif check is None and mm:
-                # Дата неизвестна — заходим на страницу: сначала meta-теги, потом видимый текст
+                _sitemap_unknown.append(item)  # отложим на параллельный fetch
+            elif not mm:
+                sitemap_content.append(item)
+
+        # Параллельный fetch для URL без известной даты (cap=20, 8 воркеров, 5с на URL)
+        if _sitemap_unknown and mm:
+            def _fetch_sitemap_date(item):
                 try:
-                    page = request_text(url, timeout=8)
-                    visible_date = extract_visible_date(page)  # уже включает extract_meta_date
+                    page = request_text(item["url"], timeout=5)
+                    visible_date = extract_visible_date(page)
                     if visible_date:
+                        item = dict(item)
                         item["lastmod"] = visible_date
                         if item_matches_month(item, mm) is True:
                             ptitle, _ = parse_title_description(page)
                             if ptitle:
                                 item["title"] = ptitle[:180]
-                            sitemap_content.append(item)
-                    # Если дата не нашлась — статью не включаем
+                            return item
                 except Exception:
                     pass
-            elif not mm:
-                sitemap_content.append(item)
+                return None
+            from concurrent.futures import ThreadPoolExecutor as _TPE2, as_completed as _ac2
+            with _TPE2(max_workers=8) as _p2:
+                _futs2 = {_p2.submit(_fetch_sitemap_date, it): it for it in _sitemap_unknown[:20]}
+                for _f2 in _ac2(_futs2, timeout=40):
+                    try:
+                        _r2 = _f2.result()
+                        if _r2:
+                            sitemap_content.append(_r2)
+                    except Exception:
+                        pass
 
-        # --- HTML-парсинг главной + раздела блога ---
+        # --- HTML-парсинг главной + раздела блога (параллельно, до 3 доп. страниц) ---
         html_content = []
         html_external = []
-        pages_to_check = discover_extra_public_pages(markup, comp["site"])[:7]
-        for extra in [comp["site"]] + pages_to_check:
+        pages_to_check = discover_extra_public_pages(markup, comp["site"])[:3]
+
+        def _fetch_extra_page(extra):
             try:
-                page = request_text(extra, timeout=8) if extra != comp["site"] else markup
-                more = parse_links(page, extra)
-                html_content.extend(more["content"])
-                html_external.extend(more["external"])
-                if len(result["images"]) < 8:
-                    result["images"].extend(parse_images(page, extra, comp["key"])[:3])
-                result["social"].extend(parse_social_links(page))
-                result["emails"].extend(parse_emails(page))
-                result["phones"].extend(parse_phones(page))
+                page = request_text(extra, timeout=6) if extra != comp["site"] else markup
+                return extra, page
             except Exception:
-                pass
+                return extra, None
+
+        from concurrent.futures import ThreadPoolExecutor as _TPE3, as_completed as _ac3
+        with _TPE3(max_workers=4) as _p3:
+            _futs3 = {_p3.submit(_fetch_extra_page, u): u for u in [comp["site"]] + pages_to_check}
+            for _f3 in _ac3(_futs3, timeout=20):
+                try:
+                    _url3, _page3 = _f3.result()
+                    if not _page3:
+                        continue
+                    more = parse_links(_page3, _url3)
+                    html_content.extend(more["content"])
+                    html_external.extend(more["external"])
+                    if len(result["images"]) < 8:
+                        result["images"].extend(parse_images(_page3, _url3, comp["key"])[:3])
+                    result["social"].extend(parse_social_links(_page3))
+                    result["emails"].extend(parse_emails(_page3))
+                    result["phones"].extend(parse_phones(_page3))
+                except Exception:
+                    pass
 
         # Если есть данные из sitemap — используем их как контент,
         # HTML-ссылки используем только как дополнение для статей без sitemap.
         if sitemap_content:
             result["content"] = sitemap_content
         else:
-            # Sitemap недоступен — фильтруем HTML-ссылки по дате
-            filtered = []
+            # Sitemap недоступен — фильтруем HTML-ссылки по дате (параллельно)
+            _html_known = []
+            _html_unknown = []
             for item in unique_items(html_content, "url"):
                 check = item_matches_month(item, mm)
                 if check is True:
-                    filtered.append(item)
+                    _html_known.append(item)
                 elif check is None and mm:
-                    # Нет даты ни в lastmod, ни в URL — читаем страницу
+                    _html_unknown.append(item)
+                elif not mm:
+                    _html_known.append(item)
+
+            if _html_unknown and mm:
+                def _fetch_html_date(item):
                     try:
-                        page = request_text(item["url"], timeout=8)
+                        page = request_text(item["url"], timeout=5)
                         visible_date = extract_visible_date(page)
                         if visible_date:
+                            item = dict(item)
                             item["lastmod"] = visible_date
                             if item_matches_month(item, mm) is True:
                                 ptitle, _ = parse_title_description(page)
                                 if ptitle:
                                     item["title"] = ptitle[:180]
-                                filtered.append(item)
+                                return item
                     except Exception:
                         pass
-                elif not mm:
-                    filtered.append(item)
-            result["content"] = filtered
+                    return None
+                from concurrent.futures import ThreadPoolExecutor as _TPE4, as_completed as _ac4
+                with _TPE4(max_workers=8) as _p4:
+                    _futs4 = {_p4.submit(_fetch_html_date, it): it for it in _html_unknown[:15]}
+                    for _f4 in _ac4(_futs4, timeout=30):
+                        try:
+                            _r4 = _f4.result()
+                            if _r4:
+                                _html_known.append(_r4)
+                        except Exception:
+                            pass
+            result["content"] = _html_known
 
-        # --- Фильтрация внешних публикаций по дате ---
-        # Для каждой внешней ссылки заходим на страницу и читаем видимую дату.
-        # Включаем только те, у которых дата совпадает с месяцем (или month не задан).
+        # --- Фильтрация внешних публикаций по дате (параллельно, cap=15) ---
+        _ext_unique = unique_items(html_external, "url")[:15]
         filtered_external = []
-        for ext_item in unique_items(html_external, "url")[:40]:
+
+        def _check_ext(ext_item):
             if not mm:
-                filtered_external.append(ext_item)
-                continue
-            # Сначала проверяем URL на наличие даты
+                return ext_item
             if _url_month(ext_item.get("url", ""), mm):
-                filtered_external.append(ext_item)
-                continue
-            # Иначе — заходим на страницу и читаем видимую дату
+                return ext_item
             try:
-                ext_page = request_text(ext_item["url"], timeout=7)
+                ext_page = request_text(ext_item["url"], timeout=5)
                 visible_date = extract_visible_date(ext_page)
                 if visible_date:
+                    ext_item = dict(ext_item)
                     ext_item["lastmod"] = visible_date
                     parts = visible_date.split("-")
                     if len(parts) >= 2 and parts[1] == mm:
-                        # Подтягиваем заголовок
                         ptitle, _ = parse_title_description(ext_page)
                         if ptitle:
                             ext_item["title"] = ptitle[:180]
-                        filtered_external.append(ext_item)
+                        return ext_item
             except Exception:
                 pass
+            return None
+
+        from concurrent.futures import ThreadPoolExecutor as _TPE5, as_completed as _ac5
+        with _TPE5(max_workers=8) as _p5:
+            _futs5 = {_p5.submit(_check_ext, it): it for it in _ext_unique}
+            for _f5 in _ac5(_futs5, timeout=25):
+                try:
+                    _r5 = _f5.result()
+                    if _r5:
+                        filtered_external.append(_r5)
+                except Exception:
+                    pass
 
         result["external"] = filtered_external[:30]
         result["content"] = unique_items(result["content"], "url")[:50]
