@@ -2022,19 +2022,36 @@ def _collect_one(comp, source, month=None):
     return merged_comp, site_data, social_channels, web_mentions, updates
 
 
-def merge_real_data(month, import_text, sources, manual_metrics=None, auth=None):
-    from concurrent.futures import ThreadPoolExecutor
+def merge_real_data(month, import_text, sources, manual_metrics=None, auth=None, on_progress=None):
+    from concurrent.futures import ThreadPoolExecutor, as_completed
 
     auth_text, auth_errors = collect_authorized_text(auth)
     parsed = parse_import_text((import_text or "") + "\n" + auth_text)
     manual = parse_manual_metrics(manual_metrics)
 
     # параллельно тянем сеть по всем конкурентам — это в разы быстрее, чем по очереди
-    with ThreadPoolExecutor(max_workers=len(COMPETITORS)) as pool:
-        results = list(pool.map(
-            lambda comp: _collect_one(comp, sources.get(comp["key"], {}), month=month),
-            COMPETITORS,
-        ))
+    n_total = len(COMPETITORS)
+    results_map = {}
+    with ThreadPoolExecutor(max_workers=n_total) as pool:
+        futures = {
+            pool.submit(_collect_one, comp, sources.get(comp["key"], {}), month=month): comp
+            for comp in COMPETITORS
+        }
+        done = 0
+        for fut in as_completed(futures):
+            comp = futures[fut]
+            try:
+                results_map[comp["key"]] = fut.result()
+            except Exception as exc:
+                results_map[comp["key"]] = (comp, {}, [], [], [])
+                print(f"[collect_one] {comp['name']} ошибка: {exc}", flush=True)
+            done += 1
+            if on_progress:
+                try:
+                    on_progress(f"Собираю данные... {done}/{n_total} конкурентов")
+                except Exception:
+                    pass
+    results = [results_map[comp["key"]] for comp in COMPETITORS]
 
     items = []
     for comp, site_data, social_channels, web_mentions, updates in results:
@@ -2240,7 +2257,7 @@ def event_item_html(ev):
 def update_block_html(updates):
     """Рендерит блок обновлений: версия + дата + список фич."""
     if not updates:
-        return '<p>Обновлений за этот месяц не найдено автоматически.</p>'
+        return '<p class="empty-note">Обновлений за этот месяц не найдено автоматически.</p>'
     html = ""
     for upd in updates:
         version  = upd.get("version", "")
@@ -2249,24 +2266,41 @@ def update_block_html(updates):
         url      = upd.get("url", "")
         items    = upd.get("items", [])
 
-        header_parts = []
-        if version:
-            header_parts.append(f'<b>{e(version)}</b>')
-        if date_str:
-            header_parts.append(f'<span style="color:#888">{e(date_str)}</span>')
-        if title and title not in version:
-            header_parts.append(e(title))
-        header = " · ".join(header_parts)
-        if url:
-            header += f' <a href="{e(url)}" target="_blank" style="font-size:11px;color:#1565c0">[источник]</a>'
+        # Заголовок обновления
+        ver_badge = (
+            f'<span style="display:inline-block;background:#ede7f6;color:#6a1b9a;'
+            f'font-size:11px;font-weight:700;padding:2px 8px;border-radius:4px;'
+            f'margin-right:6px">{e(version)}</span>'
+            if version else ""
+        )
+        date_badge = (
+            f'<span style="color:#999;font-size:11px">{e(date_str)}</span>'
+            if date_str else ""
+        )
+        title_text = e(title) if (title and title not in version) else ""
+        src_link = (
+            f'<a href="{e(url)}" target="_blank" style="font-size:11px;color:#1565c0;margin-left:8px">↗ источник</a>'
+            if url else ""
+        )
+
+        header_inner = " ".join(x for x in [ver_badge, date_badge] if x)
+        if title_text:
+            header_inner += f'<span style="font-size:13px;font-weight:600;color:#1a1a1a;display:block;margin-top:3px">{title_text}</span>'
+        header_inner += src_link
 
         if items:
-            items_html = "".join(f'<li style="margin-bottom:2px">{e(it)}</li>' for it in items)
-            body = f'<ol style="margin:4px 0 8px 16px;padding:0">{items_html}</ol>'
+            items_html = "".join(
+                f'<li style="padding:3px 0;border-bottom:1px solid #f0f0f0;font-size:13px;color:#333">{e(it)}</li>'
+                for it in items
+            )
+            body = f'<ul style="margin:8px 0 0;padding-left:18px;list-style:disc">{items_html}</ul>'
         else:
             body = ""
 
-        html += f'<div style="margin-bottom:10px"><p style="margin:0 0 2px">{header}</p>{body}</div>'
+        html += (
+            f'<div style="border:1px solid #ede7f6;border-radius:8px;padding:10px 14px;margin-bottom:10px;background:#faf8ff">'
+            f'<div>{header_inner}</div>{body}</div>'
+        )
     return html
 
 
@@ -2474,6 +2508,7 @@ td.left{text-align:left}
 </div>
 """
     body += render_analytics_html(items)
+    body += render_summary_html(items)
 
     for idx, item in enumerate(items):
         hdr_color = COMP_COLORS[idx % len(COMP_COLORS)]
@@ -2683,7 +2718,6 @@ td.left{text-align:left}
   </div>
 </div>"""
 
-    body += render_summary_html(items)
     body += "</div></body></html>"
     return body
 
@@ -2903,7 +2937,7 @@ if _flask_ok:
                 print(f"[JOB {job_id}] merge_real_data...", flush=True)
                 import concurrent.futures as _cf
                 with _cf.ThreadPoolExecutor(max_workers=1) as _exc:
-                    _fut = _exc.submit(merge_real_data, month, import_text, sources, manual_metrics, auth)
+                    _fut = _exc.submit(merge_real_data, month, import_text, sources, manual_metrics, auth, _update_step)
                     try:
                         items = _fut.result(timeout=480)  # 8 минут максимум
                     except _cf.TimeoutError:

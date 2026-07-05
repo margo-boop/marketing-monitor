@@ -625,7 +625,12 @@
     $("result").scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
-  async function pollJob(textEl) {
+  function fmtElapsed(ms) {
+    const s = Math.floor(ms / 1000);
+    return s < 10 ? "" : ` (${Math.floor(s/60)}:${String(s%60).padStart(2,"0")})`;
+  }
+
+  async function pollJob(textEl, startTime) {
     const dots = [".", "..", "..."];
     let i = 0, waited = 0;
     const MAX = 600000;
@@ -640,7 +645,7 @@
             textEl.textContent = "Сервер запускается" + dot; return;
           }
           if (job.status === "running") {
-            textEl.textContent = (job.step || "Собираю данные") + dot;
+            textEl.textContent = (job.step || "Собираю данные") + dot + fmtElapsed(Date.now() - startTime);
           } else if (job.status === "done") {
             clearInterval(timer); resolve(job);
           } else if ((job.status === "not_found" || r.status === 404) && waited < 30000) {
@@ -666,6 +671,7 @@
     $("result").classList.remove("show");
     setRunning(true);
     $("progressText").textContent = "Запускаю...";
+    const _startTime = Date.now();
 
     try {
       fetch("/api/run", {
@@ -680,7 +686,7 @@
         })
       }).catch(() => {});
 
-      const job = await pollJob($("progressText"));
+      const job = await pollJob($("progressText"), _startTime);
       showResult(job);
       $("statusMsg").className = "status-msg ok";
       $("statusMsg").textContent = "Готово";
