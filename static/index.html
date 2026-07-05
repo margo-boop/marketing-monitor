@@ -6,25 +6,114 @@
   <title>Мониторинг конкурентов</title>
   <style>
     :root {
-      --bg: #f7f6f2;
-      --paper: #fffefa;
-      --line: #ddd9cf;
-      --text: #1e1e1c;
-      --muted: #686861;
-      --accent: #0d5aa7;
-      --accent-2: #7a5300;
-      --soft: #fff4df;
-      --ok: #14753f;
-      --bad: #a52b2b;
+      --bg: #f4f5f7;
+      --paper: #ffffff;
+      --line: #e2e4e9;
+      --text: #1a1d23;
+      --muted: #6b7280;
+      --accent: #4f6ef7;
+      --accent-hover: #3a58e0;
+      --ok: #16a34a;
+      --ok-bg: #dcfce7;
+      --bad: #dc2626;
+      --bad-bg: #fee2e2;
+      --header-bg: #12141a;
+      --header-text: #f1f2f5;
+      --header-muted: #8891a5;
+      --card-dark: #1e2130;
     }
     * { box-sizing: border-box; }
     body {
       margin: 0;
       background: var(--bg);
       color: var(--text);
-      font-family: Arial, Helvetica, sans-serif;
-      line-height: 1.45;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+      line-height: 1.5;
     }
+
+    /* ─── LOGIN SCREEN ─── */
+    #loginScreen {
+      position: fixed;
+      inset: 0;
+      background: #0a0b0f;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    }
+    #loginScreen.hidden { display: none; }
+    .login-card {
+      background: #161820;
+      border: 1px solid #2a2d3a;
+      border-radius: 16px;
+      padding: 40px 36px;
+      width: 100%;
+      max-width: 380px;
+      text-align: center;
+    }
+    .login-logo {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 52px;
+      height: 52px;
+      background: var(--accent);
+      border-radius: 12px;
+      margin-bottom: 20px;
+    }
+    .login-logo svg { width: 28px; height: 28px; fill: #fff; }
+    .login-title {
+      color: #f1f2f5;
+      font-size: 22px;
+      font-weight: 700;
+      margin: 0 0 6px;
+    }
+    .login-sub {
+      color: #8891a5;
+      font-size: 14px;
+      margin: 0 0 28px;
+    }
+    .login-field {
+      position: relative;
+      margin-bottom: 14px;
+    }
+    .login-field input {
+      width: 100%;
+      background: #0f1016;
+      border: 1px solid #2a2d3a;
+      border-radius: 10px;
+      color: #f1f2f5;
+      font-size: 16px;
+      padding: 13px 16px;
+      outline: none;
+      letter-spacing: 2px;
+      text-align: center;
+      font-family: inherit;
+    }
+    .login-field input::placeholder { letter-spacing: 0; color: #4a5068; }
+    .login-field input:focus { border-color: var(--accent); }
+    .login-error {
+      color: #f87171;
+      font-size: 13px;
+      margin: 0 0 12px;
+      min-height: 18px;
+    }
+    .btn-login {
+      width: 100%;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      font-size: 16px;
+      font-weight: 700;
+      padding: 14px;
+      cursor: pointer;
+      font-family: inherit;
+      transition: background .15s;
+    }
+    .btn-login:hover { background: var(--accent-hover); }
+
+    /* ─── HEADER ─── */
     header {
       position: sticky;
       top: 0;
@@ -33,301 +122,541 @@
       justify-content: space-between;
       gap: 12px;
       align-items: center;
-      padding: 10px 22px;
-      background: rgba(255, 254, 250, .94);
-      border-bottom: 1px solid var(--line);
-      backdrop-filter: blur(8px);
+      padding: 0 24px;
+      height: 58px;
+      background: var(--header-bg);
+      border-bottom: 1px solid #22253a;
     }
     .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: var(--header-text);
       font-weight: 800;
-      font-size: 18px;
-    }
-    main {
-      max-width: 1060px;
-      margin: 0 auto;
-      padding: 18px;
-    }
-    h1 {
-      margin: 0 0 10px;
-      font-size: clamp(28px, 4vw, 42px);
-      line-height: 1.08;
-      letter-spacing: 0;
-    }
-    h2 {
-      margin: 0 0 10px;
-      font-size: 22px;
-      line-height: 1.18;
-      letter-spacing: 0;
-    }
-    h3 {
-      margin: 16px 0 8px;
       font-size: 16px;
+      letter-spacing: -.2px;
     }
-    p { margin: 0 0 12px; }
-    .muted { color: var(--muted); }
-    .hero {
-      display: grid;
-      grid-template-columns: minmax(0, 1.25fr) minmax(280px, .75fr);
-      gap: 14px;
-      align-items: stretch;
-      margin-bottom: 14px;
+    .brand-dot {
+      width: 8px; height: 8px;
+      background: var(--accent);
+      border-radius: 50%;
+      flex-shrink: 0;
     }
-    .panel {
-      background: var(--paper);
-      border: 1px solid var(--line);
-      border-radius: 12px;
-      padding: 18px;
-      margin-bottom: 14px;
+    .header-right {
+      display: flex;
+      gap: 10px;
+      align-items: center;
     }
-    .steps {
+
+    /* ─── MAIN ─── */
+    main {
+      max-width: 1080px;
+      margin: 0 auto;
+      padding: 24px 18px;
+    }
+
+    /* ─── PAGE TITLE ─── */
+    .page-title {
+      margin: 0 0 6px;
+      font-size: clamp(24px, 3.5vw, 36px);
+      font-weight: 800;
+      line-height: 1.1;
+      letter-spacing: -.5px;
+    }
+    .page-sub {
+      margin: 0 0 24px;
+      color: var(--muted);
+      font-size: 15px;
+    }
+
+    /* ─── STAT CARDS ROW ─── */
+    .stat-row {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
-      gap: 8px;
-      margin: 14px 0;
+      gap: 12px;
+      margin-bottom: 24px;
     }
-    .step {
+    .stat-card {
+      background: var(--card-dark);
+      border-radius: 14px;
+      padding: 20px 22px;
+      color: #fff;
+    }
+    .stat-label {
+      font-size: 13px;
+      color: #8891a5;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+    .stat-value {
+      font-size: 28px;
+      font-weight: 800;
+      line-height: 1;
+      margin-bottom: 6px;
+    }
+    .stat-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 12px;
+      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: 20px;
+    }
+    .stat-badge.up { background: rgba(22, 163, 74, .2); color: #4ade80; }
+    .stat-badge.down { background: rgba(220, 38, 38, .2); color: #f87171; }
+
+    /* ─── SECTIONS LAYOUT ─── */
+    .section-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.35fr) minmax(260px, .65fr);
+      gap: 16px;
+      align-items: start;
+      margin-bottom: 16px;
+    }
+
+    /* ─── CARD (panel) ─── */
+    .card {
+      background: var(--paper);
       border: 1px solid var(--line);
-      border-radius: 10px;
-      padding: 10px;
-      background: #fff;
-      min-height: 82px;
-      font-size: 14px;
+      border-radius: 14px;
+      padding: 22px;
+      margin-bottom: 16px;
     }
-    .step b {
-      display: block;
-      margin-bottom: 5px;
-      color: var(--accent);
+    .card:last-child { margin-bottom: 0; }
+    .card-title {
+      font-size: 17px;
+      font-weight: 800;
+      margin: 0 0 4px;
     }
+    .card-sub {
+      font-size: 13px;
+      color: var(--muted);
+      margin: 0 0 16px;
+    }
+
+    /* ─── MONTH SELECTOR ─── */
     .month-row {
       display: flex;
       flex-wrap: wrap;
       gap: 8px;
-      margin: 10px 0 16px;
+      margin: 12px 0 18px;
     }
-    button, .link-button {
+    .month {
+      border: 1.5px solid var(--line);
+      border-radius: 8px;
+      background: var(--bg);
+      color: var(--muted);
+      padding: 7px 14px;
+      font: inherit;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all .15s;
+    }
+    .month:hover { border-color: var(--accent); color: var(--accent); }
+    .month.active {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+    }
+
+    /* ─── STEPS ─── */
+    .steps {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      margin: 0 0 20px;
+    }
+    .step {
+      background: var(--bg);
       border: 1px solid var(--line);
       border-radius: 10px;
-      background: #fff;
-      color: var(--text);
-      padding: 9px 13px;
+      padding: 12px 14px;
+      font-size: 13px;
+    }
+    .step-num {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 22px; height: 22px;
+      background: var(--accent);
+      color: #fff;
+      border-radius: 50%;
+      font-size: 11px;
+      font-weight: 800;
+      margin-bottom: 6px;
+    }
+    .step b { display: block; margin-bottom: 3px; font-size: 13px; }
+
+    /* ─── BUTTONS ─── */
+    .btn {
+      border-radius: 10px;
+      padding: 10px 16px;
       font: inherit;
       font-weight: 700;
-      text-decoration: none;
       cursor: pointer;
       display: inline-flex;
       align-items: center;
       justify-content: center;
       gap: 8px;
       min-height: 40px;
+      font-size: 14px;
+      text-decoration: none;
+      border: 1.5px solid var(--line);
+      background: var(--paper);
+      color: var(--text);
+      transition: border-color .15s;
     }
-    button:hover, .link-button:hover { border-color: #bdb7aa; }
-    .month.active {
+    .btn:hover { border-color: #aab; }
+    .btn.primary {
+      background: var(--accent);
+      border-color: var(--accent);
       color: #fff;
-      background: var(--text);
-      border-color: var(--text);
-    }
-    .primary {
-      color: #fff;
-      background: var(--text);
-      border-color: var(--text);
-      font-size: 16px;
+      font-size: 15px;
       min-height: 46px;
-      padding: 11px 18px;
+      padding: 12px 22px;
     }
-    .primary:disabled {
-      opacity: .55;
-      cursor: wait;
+    .btn.primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+    .btn.primary:disabled { opacity: .5; cursor: wait; }
+    .btn.header-btn {
+      background: rgba(255,255,255,.06);
+      border-color: rgba(255,255,255,.12);
+      color: var(--header-text);
+      font-size: 14px;
+      min-height: 36px;
+      padding: 8px 16px;
     }
-    .secondary { background: #fff; }
+    .btn.header-btn:hover { background: rgba(255,255,255,.1); }
+
+    /* ─── STATUS ─── */
     .status {
-      margin-top: 10px;
-      min-height: 24px;
+      margin-top: 12px;
+      min-height: 22px;
+      font-size: 14px;
+      font-weight: 600;
       color: var(--muted);
-      font-weight: 700;
     }
     .status.ok { color: var(--ok); }
     .status.bad { color: var(--bad); }
-    textarea, input {
+
+    /* ─── FORM ELEMENTS ─── */
+    textarea, input[type="text"], input[type="password"], input[type="url"], input:not([type]) {
       width: 100%;
-      border: 1px solid var(--line);
+      border: 1.5px solid var(--line);
       border-radius: 10px;
-      background: #fff;
+      background: var(--bg);
       color: var(--text);
       font: inherit;
-      padding: 10px 12px;
+      font-size: 14px;
+      padding: 10px 13px;
       outline: none;
+      transition: border-color .15s;
     }
     textarea:focus, input:focus {
       border-color: var(--accent);
-      box-shadow: 0 0 0 3px rgba(13, 90, 167, .12);
+      background: #fff;
+      box-shadow: 0 0 0 3px rgba(79, 110, 247, .1);
     }
     textarea {
-      min-height: 170px;
+      min-height: 160px;
       resize: vertical;
     }
     label {
       display: block;
-      font-weight: 800;
-      margin-bottom: 6px;
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 5px;
     }
-    .help {
-      background: var(--soft);
-      border: 1px solid #f0c87d;
-      border-radius: 10px;
-      color: var(--accent-2);
-      padding: 12px 14px;
-      margin: 12px 0 0;
-      font-size: 15px;
+
+    /* ─── GRID ─── */
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
     }
-    details.panel {
+    .grid.three { grid-template-columns: repeat(3, 1fr); }
+
+    /* ─── COLLAPSIBLE ─── */
+    details.card {
       padding: 0;
       overflow: hidden;
     }
-    details.panel > summary {
+    details.card > summary {
       list-style: none;
       cursor: pointer;
-      padding: 16px 18px;
-      font-weight: 900;
-      font-size: 18px;
+      padding: 18px 22px;
+      font-weight: 800;
+      font-size: 16px;
       display: flex;
       align-items: center;
       justify-content: space-between;
       gap: 16px;
+      user-select: none;
     }
-    details.panel > summary::-webkit-details-marker { display: none; }
-    details.panel > summary::after {
+    details.card > summary::-webkit-details-marker { display: none; }
+    details.card > summary::after {
       content: "+";
-      font-size: 28px;
+      font-size: 24px;
       line-height: 1;
+      color: var(--muted);
+      font-weight: 400;
     }
-    details[open].panel > summary::after { content: "–"; }
+    details[open].card > summary::after { content: "−"; }
     .details-body {
       border-top: 1px solid var(--line);
-      padding: 18px;
+      padding: 20px 22px;
     }
-    .grid {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 12px 14px;
-    }
-    .grid.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+
+    /* ─── COMPETITOR ROWS ─── */
     .competitor {
       border-top: 1px solid var(--line);
       padding-top: 16px;
       margin-top: 16px;
     }
-    .competitor:first-child {
-      border-top: 0;
-      padding-top: 0;
-      margin-top: 0;
-    }
+    .competitor:first-child { border-top: 0; padding-top: 0; margin-top: 0; }
     .competitor-title {
       display: flex;
       justify-content: space-between;
-      gap: 12px;
-      align-items: baseline;
+      align-items: center;
       margin-bottom: 10px;
-      font-size: 17px;
-      font-weight: 900;
     }
-    .small {
-      font-size: 13px;
+    .competitor-name { font-weight: 800; font-size: 15px; }
+    .competitor-domain {
+      font-size: 12px;
       color: var(--muted);
-      font-weight: 700;
+      font-weight: 600;
+      background: var(--bg);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 3px 8px;
     }
+
+    /* ─── INFO BOX ─── */
+    .info-box {
+      background: #eff3ff;
+      border: 1px solid #c7d3fc;
+      border-radius: 10px;
+      color: #3a55c0;
+      padding: 12px 15px;
+      font-size: 14px;
+      margin-top: 14px;
+    }
+
+    /* ─── HINT TEXT ─── */
+    .hint { font-size: 13px; color: var(--muted); margin: 4px 0 0; }
+    .muted { color: var(--muted); }
+
+    /* ─── CODE BLOCK ─── */
+    .sample {
+      white-space: pre-wrap;
+      background: #f4f5f7;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 14px;
+      color: #3b4151;
+      font-family: "SFMono-Regular", Consolas, monospace;
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    /* ─── RESULT SECTION ─── */
+    .result { display: none; }
+    .result.show { display: block; }
+
+    .result-card {
+      background: var(--card-dark);
+      border-radius: 14px;
+      padding: 22px;
+      margin-bottom: 16px;
+      color: #fff;
+    }
+    .result-card-title {
+      font-size: 16px;
+      font-weight: 800;
+      color: #f1f2f5;
+      margin: 0 0 4px;
+    }
+    .result-card-sub {
+      font-size: 13px;
+      color: #8891a5;
+      margin: 0 0 16px;
+    }
+
     .actions {
       display: flex;
       flex-wrap: wrap;
       gap: 10px;
-      margin-top: 14px;
     }
-    .result {
-      display: none;
+    .link-button {
+      border-radius: 10px;
+      padding: 10px 18px;
+      font-size: 14px;
+      font-weight: 700;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+      min-height: 40px;
     }
-    .result.show {
-      display: block;
+    .link-button.primary {
+      background: var(--accent);
+      color: #fff;
+      border: none;
     }
+    .link-button.primary:hover { background: var(--accent-hover); }
+    .link-button.secondary {
+      background: rgba(255,255,255,.08);
+      color: #e0e3f0;
+      border: 1px solid rgba(255,255,255,.12);
+    }
+    .link-button.secondary:hover { background: rgba(255,255,255,.14); }
+
     iframe {
       width: 100%;
       min-height: 640px;
       border: 1px solid var(--line);
-      border-radius: 10px;
+      border-radius: 12px;
       background: #fff;
       margin-top: 16px;
     }
-    .sample {
-      white-space: pre-wrap;
-      background: #f2f0ea;
-      border: 1px solid var(--line);
-      border-radius: 10px;
-      padding: 12px;
-      color: #3b3b37;
-      font-family: Arial, Helvetica, sans-serif;
-      font-size: 15px;
-    }
-    .api-box {
-      margin-top: 14px;
-      padding-top: 14px;
+
+    /* ─── API BOX ─── */
+    .api-section {
+      margin-top: 20px;
+      padding-top: 20px;
       border-top: 1px solid var(--line);
     }
-    .api-box .hint {
-      margin-bottom: 10px;
-      color: var(--muted);
-      font-size: 14px;
+    .api-section-title {
+      font-size: 15px;
+      font-weight: 800;
+      margin: 0 0 4px;
     }
+    .api-section-sub {
+      font-size: 13px;
+      color: var(--muted);
+      margin: 0 0 14px;
+    }
+
+    /* ─── SIDEBAR CARD ─── */
+    .sidebar-info {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 22px;
+      position: sticky;
+      top: 74px;
+    }
+    .sidebar-title { font-size: 16px; font-weight: 800; margin: 0 0 8px; }
+
+    /* ─── RESPONSIVE ─── */
     @media (max-width: 860px) {
-      header { align-items: flex-start; flex-direction: column; }
-      main { padding: 14px; }
-      .hero, .steps, .grid, .grid.three { grid-template-columns: 1fr; }
-      .panel { padding: 16px; border-radius: 12px; }
-      details.panel > summary { padding: 16px; }
-      .details-body { padding: 16px; }
+      .section-grid { grid-template-columns: 1fr; }
+      .stat-row { grid-template-columns: 1fr; }
+      .steps { grid-template-columns: 1fr; }
+      .grid, .grid.three { grid-template-columns: 1fr; }
+      header { padding: 0 16px; }
+      main { padding: 16px; }
+      .card, .sidebar-info { padding: 18px; border-radius: 12px; }
     }
   </style>
 </head>
 <body>
-  <header>
-    <div>
-      <div class="brand">Мониторинг конкурентов</div>
-      <div class="small">Сайты собираются автоматически, закрытые цифры вставляются выгрузкой</div>
+
+  <!-- ═══ LOGIN SCREEN ═══ -->
+  <div id="loginScreen">
+    <div class="login-card">
+      <div class="login-logo">
+        <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+          <path d="M3 3h18v2H3V3zm0 8h18v2H3v-2zm0 8h18v2H3v-2z"/>
+        </svg>
+      </div>
+      <div class="login-title">Мониторинг конкурентов</div>
+      <div class="login-sub">CheckOffice · аналитика</div>
+      <div class="login-field">
+        <input id="passwordInput" type="password" placeholder="Введите код доступа" autocomplete="current-password">
+      </div>
+      <div class="login-error" id="loginError"></div>
+      <button class="btn-login" id="loginBtn" type="button">Войти</button>
     </div>
-    <button class="primary" id="topRun" type="button">Собрать отчёт</button>
-  </header>
+  </div>
 
-  <main>
-    <section class="hero">
-      <div class="panel">
-        <h1>Мониторинг конкурентов</h1>
-        <p class="muted">Выберите месяц, вставьте данные или API-доступ и нажмите одну кнопку. Сайты и Telegram собираются автоматически.</p>
+  <!-- ═══ APP ═══ -->
+  <div id="app" style="display:none">
 
-        <div class="steps">
-          <div class="step"><b>1. Месяц</b>Выберите месяц отчёта.</div>
-          <div class="step"><b>2. Данные</b>Вставьте выгрузку, API token или ссылку экспорта.</div>
-          <div class="step"><b>3. Кнопка</b>Нажмите «Собрать отчёт» и откройте PDF.</div>
+    <header>
+      <div class="brand">
+        <div class="brand-dot"></div>
+        Мониторинг конкурентов
+      </div>
+      <div class="header-right">
+        <button class="btn header-btn" id="topRun" type="button">▶ Собрать отчёт</button>
+      </div>
+    </header>
+
+    <main>
+      <div class="page-title">Аналитика конкурентов</div>
+      <div class="page-sub">Выберите месяц, вставьте данные и нажмите «Собрать отчёт». Сайты и Telegram собираются автоматически.</div>
+
+      <!-- STAT CARDS -->
+      <div class="stat-row">
+        <div class="stat-card">
+          <div class="stat-label">Конкурентов</div>
+          <div class="stat-value">6</div>
+          <span class="stat-badge up">▲ CheckOffice + 5</span>
         </div>
-
-        <h3>Месяц отчёта</h3>
-        <div class="month-row" id="months"></div>
-
-        <button class="primary" id="mainRun" type="button">Собрать отчёт и PDF</button>
-        <div class="status" id="status">Готов к запуску.</div>
+        <div class="stat-card">
+          <div class="stat-label">Источников данных</div>
+          <div class="stat-value">3+</div>
+          <span class="stat-badge up">Сайт, Telegram, VK</span>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Формат отчёта</div>
+          <div class="stat-value">PDF</div>
+          <span class="stat-badge up">+ HTML + JSON</span>
+        </div>
       </div>
 
-      <div class="panel">
-        <h2>Готовый результат</h2>
-        <p>После запуска появятся готовые файлы:</p>
-        <p><b>PDF</b> для отправки, <b>HTML-отчёт</b> для просмотра в браузере и <b>JSON</b> с собранными данными.</p>
-        <div class="help">
-          Если нет API или выгрузки, отчёт всё равно соберёт публичную активность. Закрытые SEO-цифры появятся только после вставки настоящих данных.
-        </div>
-      </div>
-    </section>
+      <!-- MAIN + SIDEBAR -->
+      <div class="section-grid">
 
-    <section class="panel">
-      <h2>Данные для отчёта</h2>
-      <p class="muted">Можно вставить выгрузку текстом или подключить API/ссылку экспорта. Если ничего нет, оставьте поля пустыми и нажмите кнопку сбора.</p>
-      <label for="importText">Большое поле для выгрузки</label>
-      <textarea id="importText" placeholder="Примеры строк:
+        <!-- LEFT: MAIN PANEL -->
+        <div>
+          <div class="card">
+            <div class="card-title">Запустить сбор данных</div>
+            <div class="card-sub">Шаги 1–3 ниже, результат появится после запуска</div>
+
+            <div class="steps">
+              <div class="step">
+                <div class="step-num">1</div>
+                <b>Месяц</b>Выберите месяц отчёта
+              </div>
+              <div class="step">
+                <div class="step-num">2</div>
+                <b>Данные</b>Вставьте выгрузку или API
+              </div>
+              <div class="step">
+                <div class="step-num">3</div>
+                <b>Запуск</b>Нажмите кнопку и ждите PDF
+              </div>
+            </div>
+
+            <label>Месяц отчёта</label>
+            <div class="month-row" id="months"></div>
+
+            <button class="btn primary" id="mainRun" type="button">▶ Собрать отчёт и PDF</button>
+            <div class="status" id="status">Готов к запуску.</div>
+          </div>
+
+          <!-- DATA INPUT -->
+          <div class="card">
+            <div class="card-title">Данные для отчёта</div>
+            <div class="card-sub">Вставьте выгрузку текстом или подключите API. Если нет данных — оставьте пустым.</div>
+
+            <label for="importText">Большое поле для выгрузки</label>
+            <textarea id="importText" placeholder="Примеры строк:
 чек офис ; 1631
 check office ; 920
 CheckOffice Яндекс TOP-50 312
@@ -336,75 +665,69 @@ CheckOffice Google TOP-50 280
 MD Audit Telegram 1250
 Service Inspector VK 980"></textarea>
 
-      <div class="api-box">
-        <h3>Если есть API или ссылка экспорта</h3>
-        <p class="hint">Заполните только то, что есть. Зайдите в сервис, сделайте экспорт/выгрузку, а ссылку или API token вставьте сюда. После этого нажмите «Собрать отчёт» сверху или снизу.</p>
-        <div class="help">
-          Куда заходить за данными:
-          <ul style="margin:8px 0 0; padding-left:20px;">
-            <li><b>SpyWords</b> — <a href="https://spywords.ru/" target="_blank" rel="noopener">spywords.ru</a> → откройте домен конкурента → «Экспорт» → вставьте ссылку или скопированные цифры.</li>
-            <li><b>Яндекс Вордстат</b> — <a href="https://wordstat.yandex.ru/" target="_blank" rel="noopener">wordstat.yandex.ru</a> → введите запрос → выгрузите показы → вставьте ссылку или цифры.</li>
-          </ul>
-        </div>
-        <div class="grid">
-          <div>
-            <label for="apiToken">API token</label>
-            <input id="apiToken" placeholder="Вставьте API token">
-          </div>
-          <div>
-            <label for="spywordsUrl">Ссылка экспорта SpyWords</label>
-            <input id="spywordsUrl" placeholder="https://spywords.ru/...">
-            <p class="hint">Откуда брать: <a href="https://spywords.ru/" target="_blank" rel="noopener">spywords.ru</a> → домен → Экспорт.</p>
-          </div>
-          <div>
-            <label for="wordstatUrl">Ссылка экспорта Вордстат</label>
-            <input id="wordstatUrl" placeholder="https://wordstat.yandex.ru/...">
-            <p class="hint">Откуда брать: <a href="https://wordstat.yandex.ru/" target="_blank" rel="noopener">wordstat.yandex.ru</a> → запрос → выгрузка.</p>
-          </div>
-          <div>
-            <label for="extraUrls">Дополнительные страницы</label>
-            <input id="extraUrls" placeholder="URL через запятую">
-          </div>
-        </div>
-      </div>
+            <div class="api-section">
+              <div class="api-section-title">API или ссылка экспорта</div>
+              <div class="api-section-sub">Заполните только то, что есть. После этого нажмите «Собрать отчёт».</div>
+              <div class="info-box">
+                Куда заходить: <b>SpyWords</b> → домен → Экспорт; <b>Яндекс Вордстат</b> → запрос → копируйте цифры.
+              </div>
+              <div class="grid" style="margin-top:14px">
+                <div>
+                  <label for="apiToken">API token</label>
+                  <input id="apiToken" placeholder="Вставьте API token">
+                </div>
+                <div>
+                  <label for="spywordsUrl">Ссылка экспорта SpyWords</label>
+                  <input id="spywordsUrl" placeholder="https://spywords.ru/...">
+                  <p class="hint">Откуда: <a href="https://spywords.ru/" target="_blank" rel="noopener">spywords.ru</a> → домен → Экспорт</p>
+                </div>
+                <div>
+                  <label for="wordstatUrl">Ссылка экспорта Вордстат</label>
+                  <input id="wordstatUrl" placeholder="https://wordstat.yandex.ru/...">
+                  <p class="hint">Откуда: <a href="https://wordstat.yandex.ru/" target="_blank" rel="noopener">wordstat.yandex.ru</a> → выгрузка</p>
+                </div>
+                <div>
+                  <label for="extraUrls">Дополнительные страницы</label>
+                  <input id="extraUrls" placeholder="URL через запятую">
+                </div>
+              </div>
+            </div>
 
-      <details>
-        <summary>Где взять API token и ссылку экспорта (пошагово)</summary>
-        <div class="sample">КОРОТКО: чаще всего API token НЕ нужен. Самый простой путь — открыть сервис,
-скопировать цифры и вставить их в большое поле выше или во вкладку «Ввести цифры вручную».
-API token нужен только если у вас платный доступ с API.
+            <details style="margin-top:14px">
+              <summary style="cursor:pointer; font-weight:700; font-size:14px; color:var(--muted); padding: 8px 0; list-style:none; display:flex; justify-content:space-between;">
+                Где взять API token и ссылку экспорта
+                <span>+</span>
+              </summary>
+              <div class="sample" style="margin-top:8px">КОРОТКО: чаще всего API token НЕ нужен. Самый простой путь — открыть сервис,
+скопировать цифры и вставить их в большое поле выше.
 
 ────────────────────────────────────
 SpyWords — https://spywords.ru/
 1. Войдите в аккаунт (нужен платный тариф для API/экспорта).
 2. Введите домен конкурента, например checkoffice.ru.
-3. Вкладки «Запросы Яндекс / Google» → кнопка «Экспорт» (выгрузка в Excel/CSV).
-   • Можно просто выделить таблицу и скопировать цифры в большое поле выше.
-4. API token: правый верхний угол → «Настройки аккаунта» → раздел «API».
-   Скопируйте ключ и вставьте его в поле «API token».
-   Прямой ссылки экспорта обычно нет — берите цифры из выгрузки.
+3. Вкладки «Запросы Яндекс / Google» → кнопка «Экспорт».
+4. API token: правый верхний угол → «Настройки» → «API».
 
 ────────────────────────────────────
 Яндекс Вордстат — https://wordstat.yandex.ru/
 1. Войдите под Яндекс-аккаунтом.
-2. Введите запрос, например «чек лист аудит», выберите регион.
-3. Посмотрите число показов в месяц слева.
-4. У Вордстата НЕТ простого API-токена для обычного пользователя.
-   Просто скопируйте строки вида:
+2. Введите запрос, например «чек лист аудит».
+3. Скопируйте строки вида:
        чек офис ; 1631
        check office ; 920
-   и вставьте в большое поле выше. Этого достаточно.
-   (Полноценный API — только через Яндекс Директ OAuth, это для разработчиков.)
+   и вставьте в большое поле выше.
 
 ────────────────────────────────────
-ИТОГ: если нет платного API — оставьте поля API token / ссылок пустыми,
-вставьте цифры текстом и нажмите «Собрать отчёт». Сайты, Telegram,
-соцсети, картинки и email соберутся автоматически без всякого токена.</div>
-      </details>
+ИТОГ: если нет платного API — оставьте поля пустыми,
+вставьте цифры текстом и нажмите «Собрать отчёт».</div>
+            </details>
 
-      <details>
-        <summary>Что именно сюда вставлять</summary>
-        <div class="sample">Из Вордстата:
+            <details style="margin-top:8px">
+              <summary style="cursor:pointer; font-weight:700; font-size:14px; color:var(--muted); padding: 8px 0; list-style:none; display:flex; justify-content:space-between;">
+                Примеры что вставлять
+                <span>+</span>
+              </summary>
+              <div class="sample" style="margin-top:8px">Из Вордстата:
 чек офис ; 1631
 check office ; 920
 
@@ -412,39 +735,111 @@ check office ; 920
 CheckOffice Яндекс TOP-50 312
 CheckOffice Яндекс TOP-10 41
 CheckOffice Google TOP-50 280
-CheckOffice Google TOP-10 33
 
 Из соцсетей:
 CheckOffice Telegram 1250
 MD Audit VK 870</div>
-      </details>
-    </section>
+            </details>
+          </div>
 
-    <details class="panel">
-      <summary>Ввести цифры вручную, если нет выгрузки</summary>
-      <div class="details-body">
-        <p class="muted">Это запасной вариант. Если выгрузка уже вставлена выше, вручную можно ничего не заполнять.</p>
-        <div id="manualMetrics"></div>
-      </div>
-    </details>
+          <!-- MANUAL METRICS -->
+          <details class="card">
+            <summary>Ввести цифры вручную, если нет выгрузки</summary>
+            <div class="details-body">
+              <p class="muted" style="font-size:14px; margin:0 0 14px">Запасной вариант. Если выгрузка уже вставлена выше — вручную ничего не заполняйте.</p>
+              <div id="manualMetrics"></div>
+            </div>
+          </details>
 
-    <details class="panel">
-      <summary>Сайты и Telegram-каналы конкурентов</summary>
-      <div class="details-body">
-        <p class="muted">Сайты уже заполнены. Telegram можно добавить, если известен канал конкурента.</p>
-        <div id="sources"></div>
-      </div>
-    </details>
+          <!-- SOURCES -->
+          <details class="card">
+            <summary>Сайты и Telegram-каналы конкурентов</summary>
+            <div class="details-body">
+              <p class="muted" style="font-size:14px; margin:0 0 14px">Сайты уже заполнены. Telegram можно добавить, если известен канал.</p>
+              <div id="sources"></div>
+            </div>
+          </details>
 
-    <section class="panel result" id="result">
-      <h2>Готово</h2>
-      <p class="muted" id="resultText">Отчёт собран.</p>
-      <div class="actions" id="resultLinks"></div>
-      <iframe id="preview" title="Предпросмотр отчёта"></iframe>
-    </section>
-  </main>
+          <!-- RESULT -->
+          <section class="result" id="result">
+            <div class="result-card">
+              <div class="result-card-title">✓ Отчёт готов</div>
+              <div class="result-card-sub" id="resultText">Отчёт собран.</div>
+              <div class="actions" id="resultLinks"></div>
+            </div>
+            <iframe id="preview" title="Предпросмотр отчёта"></iframe>
+          </section>
+        </div>
+
+        <!-- RIGHT: SIDEBAR -->
+        <div>
+          <div class="sidebar-info">
+            <div class="sidebar-title">Что получится</div>
+            <p style="font-size:14px; color:var(--muted); margin:0 0 14px">После запуска появятся файлы:</p>
+
+            <div style="display:flex; flex-direction:column; gap:10px; margin-bottom:16px">
+              <div style="display:flex; gap:10px; align-items:flex-start">
+                <div style="width:36px; height:36px; background:#fee2e2; border-radius:8px; display:flex; align-items:center; justify-content:center; flex-shrink:0; font-size:16px">📄</div>
+                <div>
+                  <div style="font-weight:700; font-size:14px">PDF</div>
+                  <div style="font-size:12px; color:var(--muted)">Для отправки коллегам</div>
+                </div>
+              </div>
+              <div style="display:flex; gap:10px; align-items:flex-start">
+                <div style="width:36px; height:36px; background:#dcfce7; border-radius:8px; display:flex; align-items:center; justify-content:center; flex-shrink:0; font-size:16px">🌐</div>
+                <div>
+                  <div style="font-weight:700; font-size:14px">HTML-отчёт</div>
+                  <div style="font-size:12px; color:var(--muted)">Просмотр в браузере</div>
+                </div>
+              </div>
+              <div style="display:flex; gap:10px; align-items:flex-start">
+                <div style="width:36px; height:36px; background:#eff3ff; border-radius:8px; display:flex; align-items:center; justify-content:center; flex-shrink:0; font-size:16px">📊</div>
+                <div>
+                  <div style="font-weight:700; font-size:14px">JSON</div>
+                  <div style="font-size:12px; color:var(--muted)">Сырые данные</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="info-box" style="margin-top:0">
+              Если нет API — отчёт всё равно соберёт публичную активность. Закрытые SEO-цифры появятся только с настоящими данными.
+            </div>
+          </div>
+        </div>
+
+      </div><!-- /section-grid -->
+    </main>
+  </div><!-- /app -->
 
   <script>
+    // ─── PASSWORD PROTECTION ───
+    const PASS = "453478";
+
+    function tryLogin() {
+      const val = document.getElementById("passwordInput").value;
+      if (val === PASS) {
+        document.getElementById("loginScreen").classList.add("hidden");
+        document.getElementById("app").style.display = "block";
+        sessionStorage.setItem("mm_auth", "1");
+      } else {
+        document.getElementById("loginError").textContent = "Неверный код. Попробуйте ещё раз.";
+        document.getElementById("passwordInput").value = "";
+        document.getElementById("passwordInput").focus();
+      }
+    }
+
+    document.getElementById("loginBtn").addEventListener("click", tryLogin);
+    document.getElementById("passwordInput").addEventListener("keydown", e => {
+      if (e.key === "Enter") tryLogin();
+    });
+
+    // Автологин если уже авторизован в этой сессии
+    if (sessionStorage.getItem("mm_auth") === "1") {
+      document.getElementById("loginScreen").classList.add("hidden");
+      document.getElementById("app").style.display = "block";
+    }
+
+    // ─── APP LOGIC ───
     const MONTHS = [
       ["feb", "Февраль 2026"],
       ["mar", "Март 2026"],
@@ -454,32 +849,30 @@ MD Audit VK 870</div>
     ];
 
     const COMPETITORS = [
-      { key: "checkoffice", name: "CheckOffice", domain: "checkoffice.ru", site: "https://checkoffice.ru" },
-      { key: "mdaudit", name: "MD Audit", domain: "mdaudit.ru", site: "https://mdaudit.ru" },
+      { key: "checkoffice",    name: "CheckOffice",       domain: "checkoffice.ru",    site: "https://checkoffice.ru" },
+      { key: "mdaudit",        name: "MD Audit",          domain: "mdaudit.ru",        site: "https://mdaudit.ru" },
       { key: "serviceinspector", name: "Service Inspector", domain: "serviceinspector.ru", site: "https://serviceinspector.ru" },
-      { key: "retailiqa", name: "Ритейлика", domain: "retailiqa.ru", site: "https://retailiqa.ru" },
-      { key: "merasoft", name: "Мерасофт", domain: "mera-soft.ru", site: "https://mera-soft.ru" },
-      { key: "imredi", name: "Imredi", domain: "imredi.biz", site: "https://imredi.biz" }
+      { key: "retailiqa",      name: "Ритейлика",         domain: "retailiqa.ru",      site: "https://retailiqa.ru" },
+      { key: "merasoft",       name: "Мерасофт",          domain: "mera-soft.ru",      site: "https://mera-soft.ru" },
+      { key: "imredi",         name: "Imredi",            domain: "imredi.biz",        site: "https://imredi.biz" }
     ];
 
     const MANUAL_FIELDS = [
-      ["yandex_top50", "Яндекс TOP-50"],
-      ["yandex_top10", "Яндекс TOP-10"],
-      ["google_top50", "Google TOP-50"],
-      ["google_top10", "Google TOP-10"],
+      ["yandex_top50",          "Яндекс TOP-50"],
+      ["yandex_top10",          "Яндекс TOP-10"],
+      ["google_top50",          "Google TOP-50"],
+      ["google_top10",          "Google TOP-10"],
       ["search_traffic_yandex", "Трафик Яндекс"],
       ["search_traffic_google", "Трафик Google"],
-      ["unique_urls_yandex", "URL Яндекс"],
-      ["unique_urls_google", "URL Google"],
-      ["telegram", "Telegram"],
-      ["vk", "VK"]
+      ["unique_urls_yandex",    "URL Яндекс"],
+      ["unique_urls_google",    "URL Google"],
+      ["telegram",              "Telegram"],
+      ["vk",                    "VK"]
     ];
 
     let selectedMonth = "jun";
 
-    function $(id) {
-      return document.getElementById(id);
-    }
+    function $(id) { return document.getElementById(id); }
 
     function drawMonths() {
       $("months").innerHTML = MONTHS.map(([key, label]) => (
@@ -497,8 +890,8 @@ MD Audit VK 870</div>
       $("sources").innerHTML = COMPETITORS.map(comp => `
         <div class="competitor" data-source="${comp.key}">
           <div class="competitor-title">
-            <span>${comp.name}</span>
-            <span class="small">${comp.domain}</span>
+            <span class="competitor-name">${comp.name}</span>
+            <span class="competitor-domain">${comp.domain}</span>
           </div>
           <div class="grid">
             <div>
@@ -518,8 +911,8 @@ MD Audit VK 870</div>
       $("manualMetrics").innerHTML = COMPETITORS.map(comp => `
         <div class="competitor" data-manual="${comp.key}">
           <div class="competitor-title">
-            <span>${comp.name}</span>
-            <span class="small">${comp.domain}</span>
+            <span class="competitor-name">${comp.name}</span>
+            <span class="competitor-domain">${comp.domain}</span>
           </div>
           <div class="grid three">
             ${MANUAL_FIELDS.map(([key, label]) => `
@@ -564,39 +957,38 @@ MD Audit VK 870</div>
         return element ? element.value.trim() : "";
       };
       return {
-        spywordsUrl: value("spywordsUrl"),
-        spywordsCookie: value("spywordsCookie"),
-        wordstatUrl: value("wordstatUrl"),
-        wordstatCookie: value("wordstatCookie"),
-        apiToken: value("apiToken"),
-        extraUrls: value("extraUrls").split(",").map(x => x.trim()).filter(Boolean)
+        spywordsUrl:     value("spywordsUrl"),
+        spywordsCookie:  value("spywordsCookie"),
+        wordstatUrl:     value("wordstatUrl"),
+        wordstatCookie:  value("wordstatCookie"),
+        apiToken:        value("apiToken"),
+        extraUrls:       value("extraUrls").split(",").map(x => x.trim()).filter(Boolean)
       };
     }
 
     function setRunning(isRunning) {
-      $("topRun").disabled = isRunning;
+      $("topRun").disabled  = isRunning;
       $("mainRun").disabled = isRunning;
-      $("topRun").textContent = isRunning ? "Собираю..." : "Собрать отчёт";
-      $("mainRun").textContent = isRunning ? "Собираю данные..." : "Собрать отчёт и PDF";
+      $("topRun").textContent  = isRunning ? "Собираю..." : "▶ Собрать отчёт";
+      $("mainRun").textContent = isRunning ? "Собираю данные..." : "▶ Собрать отчёт и PDF";
     }
 
     function reportLink(path) {
-      // добавляем уникальную метку, чтобы браузер не подсовывал старый файл из кеша
       const clean = "/" + path.replace(/^\/+/, "");
       return clean + "?v=" + Date.now();
     }
 
     function showResult(data) {
-      const report = data.report || {};
+      const report  = data.report || {};
       const htmlUrl = report.html ? reportLink(report.html) : "";
       const pdfUrl  = report.pdf  ? reportLink(report.pdf)  : "";
       const jsonUrl = report.json ? reportLink(report.json) : "";
       const dlName  = `monitoring-${report.month || selectedMonth}-${report.created || Date.now()}.pdf`;
       const links   = [];
       if (pdfUrl)  links.push(`<a class="link-button primary" href="${pdfUrl}" download="${dlName}">⬇ Скачать PDF</a>`);
-      if (pdfUrl)  links.push(`<a class="link-button" href="${pdfUrl}" target="_blank" rel="noopener">Открыть PDF</a>`);
-      if (htmlUrl) links.push(`<a class="link-button" href="${htmlUrl}" target="_blank" rel="noopener">Открыть отчёт</a>`);
-      if (jsonUrl) links.push(`<a class="link-button" href="${jsonUrl}" target="_blank" rel="noopener">Данные JSON</a>`);
+      if (pdfUrl)  links.push(`<a class="link-button secondary" href="${pdfUrl}" target="_blank" rel="noopener">Открыть PDF</a>`);
+      if (htmlUrl) links.push(`<a class="link-button secondary" href="${htmlUrl}" target="_blank" rel="noopener">Открыть отчёт</a>`);
+      if (jsonUrl) links.push(`<a class="link-button secondary" href="${jsonUrl}" target="_blank" rel="noopener">Данные JSON</a>`);
       $("resultLinks").innerHTML = links.join("");
       $("preview").src = htmlUrl || "about:blank";
       $("result").classList.add("show");
@@ -621,7 +1013,6 @@ MD Audit VK 870</div>
             try {
               job = await r.json();
             } catch (_parseErr) {
-              // Сервер вернул не-JSON (например Render ещё просыпается) — ждём
               statusEl.textContent = "Сервер запускается" + dot;
               return;
             }
@@ -631,7 +1022,6 @@ MD Audit VK 870</div>
               clearInterval(timer);
               resolve(job);
             } else if ((job.status === "not_found" || r.status === 404) && waited < 30000) {
-              // Задача ещё не стартовала — ждём до 30 сек
               statusEl.textContent = "Запускаю сбор" + dot;
             } else if (job.status === "error") {
               clearInterval(timer);
@@ -644,7 +1034,6 @@ MD Audit VK 870</div>
               reject(new Error("Задача не запустилась. Попробуйте ещё раз."));
             }
           } catch (e) {
-            // Сеть недоступна — ждём до 60 сек, потом отказ
             if (waited < 60000) {
               statusEl.textContent = "Подключаюсь к серверу" + dot;
             } else {
@@ -663,19 +1052,17 @@ MD Audit VK 870</div>
       setRunning(true);
 
       try {
-        // Отправляем запрос и сразу начинаем опрос — не ждём ответа
-        // (Railway-прокси может оборвать соединение, но задача всё равно запустится)
         fetch("/api/run", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            month: selectedMonth,
-            importText: $("importText").value,
-            sources: getSources(),
+            month:         selectedMonth,
+            importText:    $("importText").value,
+            sources:       getSources(),
             manualMetrics: getManualMetrics(),
-            auth: getAuth()
+            auth:          getAuth()
           })
-        }).catch(() => {});  // ошибки соединения игнорируем
+        }).catch(() => {});
 
         const job = await pollJob(status);
         showResult(job);
