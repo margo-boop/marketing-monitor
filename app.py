@@ -206,6 +206,9 @@ COMPETITORS = [
         "name": "Imredi",
         "domain": "imredi.biz",
         "site": "https://imredi.biz",
+        # Сайт заблокирован для серверных запросов через CDN (allowlist).
+        # Блог пуст (Tilda feed возвращает 204). Сбор сайта отключён.
+        "skip_site": True,
         "queries": ["имреди", "imredi"],
         "socials": {
             "telegram": "",
@@ -218,12 +221,36 @@ COMPETITORS = [
 ]
 
 
-MONTHS = {
-    "feb": "Февраль 2026",
-    "mar": "Март 2026",
-    "apr": "Апрель 2026",
-    "may": "Май 2026",
-    "jun": "Июнь 2026",
+def _month_label(key):
+    """Возвращает «Июнь 2026» динамически, не хардкодя год."""
+    _names = {
+        "jan": "Январь", "feb": "Февраль", "mar": "Март",
+        "apr": "Апрель", "may": "Май",     "jun": "Июнь",
+        "jul": "Июль",   "aug": "Август",  "sep": "Сентябрь",
+        "oct": "Октябрь","nov": "Ноябрь",  "dec": "Декабрь",
+    }
+    import datetime as _dt
+    _MONTH_NUM_EARLY = {
+        "jan":"01","feb":"02","mar":"03","apr":"04",
+        "may":"05","jun":"06","jul":"07","aug":"08",
+        "sep":"09","oct":"10","nov":"11","dec":"12",
+    }
+    mm = _MONTH_NUM_EARLY.get(key, "")
+    if not mm:
+        return key
+    year = _dt.date.today().year
+    # Если месяц в будущем — это прошлый год (edge case при смене года)
+    today = _dt.date.today()
+    if int(mm) > today.month and year == today.year:
+        year -= 1
+    return f"{_names.get(key, key)} {year}"
+
+MONTHS = {k: _month_label(k) for k in ("jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec")}
+
+MONTH_NUM = {
+    "jan": "01", "feb": "02", "mar": "03", "apr": "04",
+    "may": "05", "jun": "06", "jul": "07", "aug": "08",
+    "sep": "09", "oct": "10", "nov": "11", "dec": "12",
 }
 
 
@@ -848,11 +875,21 @@ _RSS_MONTHS = {
 
 
 def parse_rss_date(date_str):
-    """'Mon, 15 Jun 2026 10:00:00 GMT' → '2026-06-15'."""
-    m = re.search(r"(\d{1,2})\s+(\w{3})\s+(\d{4})", date_str or "")
+    """Разбирает дату публикации из RSS/Atom/JSON в формат 'YYYY-MM-DD'.
+    Поддерживает RFC 822 ('Mon, 15 Jun 2026 10:00:00 GMT')
+    и ISO 8601 ('2026-06-15T10:00:00Z' или '2026-06-15').
+    """
+    s = (date_str or "").strip()
+    # ISO 8601: 2026-06-15T... или 2026-06-15
+    m = re.match(r"(\d{4})-(\d{2})-(\d{2})", s)
+    if m:
+        return f"{m.group(1)}-{m.group(2)}-{m.group(3)}"
+    # RFC 822: Mon, 15 Jun 2026 10:00:00 GMT
+    m = re.search(r"(\d{1,2})\s+(\w{3})\s+(\d{4})", s)
     if m:
         d, mon, y = m.group(1).zfill(2), _RSS_MONTHS.get(m.group(2), "??"), m.group(3)
-        return f"{y}-{mon}-{d}"
+        if mon != "??":
+            return f"{y}-{mon}-{d}"
     return ""
 
 
@@ -1114,7 +1151,9 @@ def collect_web_mentions(comp, month):
             log_error(f"[web_mentions] events query={suffix}", exc)
 
     # ── 5. Поиск по именам ключевых спикеров ─────────────────────────────
-    # Ловит статьи, где компания не в заголовке, но её представитель процитирован
+    # Ловит статьи, где компания не в заголовке, но её представитель процитирован.
+    # Проверяем релевантность: название компании или домен должны быть в заголовке/сниппете.
+    _comp_tokens = [comp["name"].lower(), comp.get("domain", "").lower()] + [q.lower() for q in comp.get("queries", [])]
     for _speaker in comp.get("speakers", []):
         try:
             q = urllib.parse.quote(f'"{_speaker}"')
@@ -1131,6 +1170,10 @@ def collect_web_mentions(comp, month):
                 link  = clean_text(l.group(1))
                 pub   = parse_rss_date(d.group(1)) if d else ""
                 snip  = clean_text(re.sub(r"<[^>]+>", " ", desc.group(1)))[:300] if desc else ""
+                # Проверка релевантности: статья должна упоминать компанию
+                combined = (title + " " + snip).lower()
+                if not any(tok in combined for tok in _comp_tokens if tok):
+                    continue
                 add({"title": title, "url": link, "lastmod": pub, "snippet": snip})
         except Exception as exc:
             log_error(f"[web_mentions] speaker={_speaker}", exc)
@@ -1254,7 +1297,7 @@ def _url_month(url, mm):
     """True если URL содержит номер месяца в типичных паттернах дат."""
     return bool(
         re.search(rf"[/\-]{mm}[/\-]", url) or
-        re.search(rf"2026{mm}", url) or
+        re.search(rf"\d{{4}}{mm}(?:\D|$)", url) or  # YYYY+MM без слеша (любой год)
         re.search(rf"/{mm}/", url)
     )
 
@@ -1281,6 +1324,9 @@ def collect_site(comp, month=None):
     """month — трёхбуквенный код ('jun', 'jul' и т.д.) или None (без фильтра)."""
     result = {"summary": "", "content": [], "external": [], "images": [],
               "social": [], "emails": [], "phones": [], "errors": []}
+    if comp.get("skip_site"):
+        result["errors"].append("Сбор сайта отключён (skip_site=True).")
+        return result
     mm = MONTH_NUM.get(month, "") if month else ""
     try:
         markup = request_text(comp["site"])
@@ -2925,12 +2971,6 @@ def bar_chart(title, pairs, color="#4f77ff", unit=""):
             f'{"".join(rows)}</svg></div>')
 
 
-MONTH_NUM = {
-    "jan": "01", "feb": "02", "mar": "03", "apr": "04",
-    "may": "05", "jun": "06", "jul": "07", "aug": "08",
-    "sep": "09", "oct": "10", "nov": "11", "dec": "12",
-}
-
 def filter_by_month(items_list, month):
     """Страховочная фильтрация после collect_site. Строгая: без подтверждённой даты — не включаем."""
     mm = MONTH_NUM.get(month, "")
@@ -3609,14 +3649,14 @@ def render_executive_summary_html(items, month_label):
     else:
         blog_html = ""
 
-    # ── Telegram ─────────────────────────────────────────────────
+    # ── Соцсети (все платформы суммарно) ─────────────────────────
     tg_parts = [(s["item"].name, s["posts"]) for s in by_total if s["posts"] > 0]
     if tg_parts:
         tg_text = " · ".join(
             f'<b>{e(nm)}</b> {_num(n, "пост", "поста", "постов")}'
             for nm, n in tg_parts
         )
-        tg_html = f'<div class="exec-row"><span class="exec-icon">📣</span><span><b>Telegram:</b> {tg_text}</span></div>'
+        tg_html = f'<div class="exec-row"><span class="exec-icon">📣</span><span><b>Соцсети:</b> {tg_text}</span></div>'
     else:
         tg_html = ""
 
@@ -3641,7 +3681,7 @@ def render_executive_summary_html(items, month_label):
 
     rows_html = leader_html + product_html + tg_html + blog_html + ev_html + inactive_html
 
-    # ── AI-интерпретация (Claude Haiku, если задан ANTHROPIC_API_KEY) ────
+    # ── AI-интерпретация (Gemini Flash, если задан GEMINI_API_KEY) ──────
     ai_text = generate_ai_interpretation(items, month_label)
     if ai_text:
         ai_block = (
