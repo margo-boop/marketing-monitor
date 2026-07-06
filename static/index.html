@@ -523,7 +523,8 @@
     ["mar", "Март 2026"],
     ["apr", "Апрель 2026"],
     ["may", "Май 2026"],
-    ["jun", "Июнь 2026"]
+    ["jun", "Июнь 2026"],
+    ["jul", "Июль 2026"]
   ];
 
   const COMPETITORS = [
@@ -535,7 +536,7 @@
     { key: "imredi",          name: "Imredi",            domain: "imredi.biz",         site: "https://imredi.biz" }
   ];
 
-  let selectedMonth = "jun";
+  let selectedMonth = "jul";
 
   function $(id) { return document.getElementById(id); }
 
@@ -699,7 +700,7 @@
         importText: "", manualMetrics: {}, auth: {}
       });
       let _started = false;
-      for (let _attempt = 0; _attempt < 25 && !_started; _attempt++) {
+      for (let _attempt = 0; _attempt < 45 && !_started; _attempt++) {
         try {
           const _r = await fetch("/api/run", {
             method: "POST",
