@@ -3487,6 +3487,85 @@ def _item_activity_stats(item):
     }
 
 
+def generate_ai_interpretation(items, month_label):
+    """
+    Вызывает Claude Haiku для качественной интерпретации данных мониторинга.
+    Читает ANTHROPIC_API_KEY из окружения. При ошибке возвращает пустую строку.
+    """
+    import os
+    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+    if not api_key:
+        return ""
+    try:
+        import anthropic as _anthropic
+    except ImportError:
+        return ""
+
+    # Строим компактный дайджест по каждому конкуренту
+    lines = []
+    for item in items:
+        stats = _item_activity_stats(item)
+        parts = [f"Конкурент: {item.name}"]
+
+        if stats["blog"]:
+            titles = [x.get("title", "") for x in stats["editorial"][:3] if x.get("title")]
+            t_str = ", ".join(f'"{t[:60]}"' for t in titles if t)
+            parts.append(f"Блог: {stats['blog']} стат. — {t_str}")
+
+        for ch in item.social_channels:
+            platform = ch.get("platform", "")
+            posts = ch.get("posts", [])
+            subs = ch.get("subscribers", "")
+            if posts or (subs and subs != "—"):
+                top = [p.get("title", "") for p in posts[:2] if p.get("title")]
+                t_str = ", ".join(f'"{t[:50]}"' for t in top if t)
+                subs_str = f" ({subs} подп.)" if subs and subs != "—" else ""
+                parts.append(f"{platform}{subs_str}: {len(posts)} постов — {t_str}")
+
+        if stats["events"]:
+            ev = [ev.get("title", "") for ev in item.events[:2] if ev.get("title")]
+            parts.append(f"Мероприятия: {stats['events']} — " + ", ".join(f'"{t[:60]}"' for t in ev if t))
+
+        if stats["updates"]:
+            upd = []
+            for u in item.updates[:2]:
+                upd.append(u.get("version") or u.get("title") or "обновление")
+            parts.append(f"Обновления: {', '.join(upd)}")
+
+        relevant_ext = [x for x in item.external if is_relevant_mention(x, item.name)]
+        if relevant_ext:
+            sources = list({reg_domain(x.get("url", "")) for x in relevant_ext[:6]})
+            ext_titles = [x.get("title", "")[:70] for x in relevant_ext[:3] if x.get("title")]
+            parts.append(f"Упоминания в СМИ: {len(relevant_ext)} — {', '.join(sources[:4])}")
+            if ext_titles:
+                parts.append("  Темы: " + ", ".join(f"«{t}»" for t in ext_titles))
+
+        lines.append("\n".join(parts))
+
+    prompt = (
+        f"Ты аналитик B2B маркетинга. Ниже данные мониторинга конкурентов за {month_label}.\n\n"
+        + "\n\n".join(lines)
+        + "\n\nНапиши краткий аналитический вывод на русском языке (4–6 предложений):\n"
+        "— кто наиболее активен и в каких каналах;\n"
+        "— какие темы и тактики продвигают;\n"
+        "— что стоит взять на заметку CheckOffice.\n"
+        "Только текст, без заголовков и маркировки."
+    )
+
+    try:
+        client = _anthropic.Anthropic(api_key=api_key)
+        msg = client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=450,
+            timeout=30.0,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        return msg.content[0].text.strip()
+    except Exception as exc:
+        log_error("[ai_interpretation]", exc)
+        return ""
+
+
 def render_executive_summary_html(items, month_label):
     """Блок «Ключевые события месяца» — вставляется перед карточками конкурентов."""
     stats = [{"item": it, **_item_activity_stats(it)} for it in items]
@@ -3586,10 +3665,24 @@ def render_executive_summary_html(items, month_label):
 
     rows_html = leader_html + product_html + tg_html + blog_html + ev_html + inactive_html
 
+    # ── AI-интерпретация (Claude Haiku, если задан ANTHROPIC_API_KEY) ────
+    ai_text = generate_ai_interpretation(items, month_label)
+    if ai_text:
+        ai_block = (
+            '<div class="exec-row" style="margin-top:12px;padding-top:12px;'
+            'border-top:1px solid #e0e8f0">'
+            '<span class="exec-icon">🤖</span>'
+            f'<span style="color:#2c3e50;line-height:1.65;font-style:italic">{e(ai_text)}</span>'
+            '</div>'
+        )
+    else:
+        ai_block = ""
+
     return f"""
 <div class="exec-summary" id="exec-summary">
   <p class="exec-title">{e(month_label)} — ключевые события</p>
   {rows_html}
+  {ai_block}
 </div>
 """
 
