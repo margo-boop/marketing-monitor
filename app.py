@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import csv
 import functools
+import gzip
 import hashlib
 import html
 import io
@@ -352,6 +353,12 @@ def request_text(url, timeout=12, extra_headers=None):
             raise ValueError(f"Пропуск бинарного контента ({ct_base}): {url}")
         raw = resp.read(2_500_000)
         ctype = resp.headers.get_content_charset() or "utf-8"
+    # Автодекомпрессия gzip: если байты начинаются с магических \x1f\x8b
+    if raw[:2] == b"\x1f\x8b":
+        try:
+            raw = gzip.decompress(raw)
+        except Exception:
+            pass
     return raw.decode(ctype, errors="replace")
 
 
@@ -1142,11 +1149,13 @@ def parse_sitemap(site_url, timeout=10):
     """Возвращает {url: lastmod} из sitemap.xml / sitemap_index.xml."""
     result = {}
     base = site_url.rstrip("/")
-    for path in ["/sitemap.xml", "/sitemap_index.xml", "/sitemap/"]:
+    for path in ["/sitemap.xml", "/sitemap_index.xml", "/sitemap.xml.gz", "/sitemap/"]:
         try:
             xml = request_text(base + path, timeout=timeout)
-            # Если это индекс — вытащим первые 3 дочерних sitemap
-            for loc in re.findall(r"<sitemap>\s*<loc>(.*?)</loc>", xml, re.S | re.I)[:3]:
+            if not xml.strip():
+                continue
+            # Если это индекс — вытащим первые 5 дочерних sitemap (включая feeds)
+            for loc in re.findall(r"<sitemap>\s*<loc>(.*?)</loc>", xml, re.S | re.I)[:5]:
                 try:
                     sub = request_text(clean_text(loc), timeout=timeout)
                     xml += sub
