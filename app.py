@@ -148,6 +148,7 @@ COMPETITORS = [
         "domain": "mdaudit.ru",
         "site": "https://mdaudit.ru",
         "queries": ["мд аудит", "md audit"],
+        "speakers": ["Юрий Тюрин", "Кирилл Левкин"],
         "socials": {
             "telegram": "mdaudit",
             "vk": "mdaudit",
@@ -917,6 +918,28 @@ def collect_web_mentions(comp, month):
         except Exception as exc:
             log_error(f"[web_mentions] Google News query={query}", exc)
 
+    # ── 1б. Google News — экспертные упоминания (комментарии, цитаты) ────
+    _expert_sq = [f'"{comp["name"]}" комментарий', f'"{comp["name"]}" эксперт']
+    for _eq in _expert_sq:
+        try:
+            q = urllib.parse.quote(_eq)
+            url = f"https://news.google.com/rss/search?q={q}&hl=ru&gl=RU&ceid=RU:ru"
+            xml = request_text(url, timeout=10)
+            for block in re.findall(r"<item>(.*?)</item>", xml, re.S | re.I):
+                t = re.search(r"<title>(.*?)</title>", block, re.S)
+                l = re.search(r"<link>(.*?)</link>", block, re.S)
+                d = re.search(r"<pubDate>(.*?)</pubDate>", block, re.S)
+                desc = re.search(r"<description>(.*?)</description>", block, re.S)
+                if not (t and l):
+                    continue
+                title = clean_text(re.sub(r"<[^>]+>", "", t.group(1)))
+                link  = clean_text(l.group(1))
+                pub   = parse_rss_date(d.group(1)) if d else ""
+                snip  = clean_text(re.sub(r"<[^>]+>", " ", desc.group(1)))[:300] if desc else ""
+                add({"title": title, "url": link, "lastmod": pub, "snippet": snip})
+        except Exception as exc:
+            log_error(f"[web_mentions] expert query={_eq}", exc)
+
     # ── 2. Яндекс.Новости RSS ─────────────────────────────────────────────
     for query in queries[:2]:
         try:
@@ -938,15 +961,48 @@ def collect_web_mentions(comp, month):
         except Exception as exc:
             log_error(f"[web_mentions] Yandex News query={query}", exc)
 
+    # ── 2б. Google News — отраслевые площадки через site: ─────────────────
+    # Ловит экспертные комментарии, где имя компании в тексте, а не в заголовке
+    _PRESS_SITES = [
+        "comnews.ru", "cnews.ru", "retail.ru", "new-retail.ru",
+        "plusworld.ru", "nrcases.ru", "forbes.ru", "retailtech.ru", "hightech.plus",
+    ]
+    for _ps in _PRESS_SITES:
+        try:
+            q = urllib.parse.quote(f'"{comp["name"]}" site:{_ps}')
+            url = f"https://news.google.com/rss/search?q={q}&hl=ru&gl=RU&ceid=RU:ru"
+            xml = request_text(url, timeout=10)
+            for block in re.findall(r"<item>(.*?)</item>", xml, re.S | re.I):
+                t = re.search(r"<title>(.*?)</title>", block, re.S)
+                l = re.search(r"<link>(.*?)</link>", block, re.S)
+                d = re.search(r"<pubDate>(.*?)</pubDate>", block, re.S)
+                desc = re.search(r"<description>(.*?)</description>", block, re.S)
+                if not (t and l):
+                    continue
+                title = clean_text(re.sub(r"<[^>]+>", "", t.group(1)))
+                link  = clean_text(l.group(1))
+                pub   = parse_rss_date(d.group(1)) if d else ""
+                snip  = clean_text(re.sub(r"<[^>]+>", " ", desc.group(1)))[:300] if desc else ""
+                add({"title": title, "url": link, "lastmod": pub, "snippet": snip})
+        except Exception as exc:
+            log_error(f"[web_mentions] site search site={_ps}", exc)
+
     # ── 3. Прямой поиск на отраслевых сайтах ─────────────────────────────
     INDUSTRY_SITES = [
-        ("vc.ru",          f"https://vc.ru/search?q={urllib.parse.quote(comp['name'])}"),
-        ("habr.com",       f"https://habr.com/ru/search/?q={urllib.parse.quote(comp['name'])}&target_type=posts"),
-        ("cnews.ru",       f"https://www.cnews.ru/search?q={urllib.parse.quote(comp['name'])}"),
-        ("comnews.ru",     f"https://www.comnews.ru/search/node/{urllib.parse.quote(comp['name'])}"),
-        ("tadviser.ru",    f"https://www.tadviser.ru/index.php?s={urllib.parse.quote(comp['name'])}"),
-        ("softadvisor.ru", f"https://softadvisor.ru/catalog?q={urllib.parse.quote(comp['name'])}"),
-        ("retail.ru",      f"https://www.retail.ru/search/?q={urllib.parse.quote(comp['name'])}"),
+        ("vc.ru",              f"https://vc.ru/search?q={urllib.parse.quote(comp['name'])}"),
+        ("habr.com",           f"https://habr.com/ru/search/?q={urllib.parse.quote(comp['name'])}&target_type=posts"),
+        ("cnews.ru",           f"https://www.cnews.ru/search?q={urllib.parse.quote(comp['name'])}"),
+        ("comnews.ru",         f"https://www.comnews.ru/search/node/{urllib.parse.quote(comp['name'])}"),
+        ("tadviser.ru",        f"https://www.tadviser.ru/index.php?s={urllib.parse.quote(comp['name'])}"),
+        ("softadvisor.ru",     f"https://softadvisor.ru/catalog?q={urllib.parse.quote(comp['name'])}"),
+        ("retail.ru",          f"https://www.retail.ru/search/?q={urllib.parse.quote(comp['name'])}"),
+        ("retailtech.ru",      f"https://retailtech.ru/?s={urllib.parse.quote(comp['name'])}"),
+        ("new-retail.ru",      f"https://new-retail.ru/search.php?q={urllib.parse.quote(comp['name'])}"),
+        ("plusworld.ru",       f"https://plusworld.ru/?s={urllib.parse.quote(comp['name'])}"),
+        ("retail-loyalty.org", f"https://retail-loyalty.org/?s={urllib.parse.quote(comp['name'])}"),
+        ("forbes.ru",          f"https://www.forbes.ru/search?query={urllib.parse.quote(comp['name'])}"),
+        ("hightech.plus",      f"https://hightech.plus/search?q={urllib.parse.quote(comp['name'])}"),
+        ("globalcio.ru",       f"https://globalcio.ru/?s={urllib.parse.quote(comp['name'])}"),
     ]
     # Навигационные слова, которые точно не являются статьями
     _NAV_TEXTS = re.compile(
@@ -966,7 +1022,7 @@ def collect_web_mentions(comp, month):
 
     from concurrent.futures import ThreadPoolExecutor as _TPE, as_completed as _ac
     _pages = {}
-    with _TPE(max_workers=5) as _pool:
+    with _TPE(max_workers=7) as _pool:
         _futs = {_pool.submit(_fetch_industry_page, item): item for item in INDUSTRY_SITES}
         for _fut in _ac(_futs, timeout=35):
             try:
@@ -1030,7 +1086,29 @@ def collect_web_mentions(comp, month):
         except Exception as exc:
             log_error(f"[web_mentions] events query={suffix}", exc)
 
-    return results[:40]
+    # ── 5. Поиск по именам ключевых спикеров ─────────────────────────────
+    # Ловит статьи, где компания не в заголовке, но её представитель процитирован
+    for _speaker in comp.get("speakers", []):
+        try:
+            q = urllib.parse.quote(f'"{_speaker}"')
+            url = f"https://news.google.com/rss/search?q={q}&hl=ru&gl=RU&ceid=RU:ru"
+            xml = request_text(url, timeout=10)
+            for block in re.findall(r"<item>(.*?)</item>", xml, re.S | re.I):
+                t = re.search(r"<title>(.*?)</title>", block, re.S)
+                l = re.search(r"<link>(.*?)</link>", block, re.S)
+                d = re.search(r"<pubDate>(.*?)</pubDate>", block, re.S)
+                desc = re.search(r"<description>(.*?)</description>", block, re.S)
+                if not (t and l):
+                    continue
+                title = clean_text(re.sub(r"<[^>]+>", "", t.group(1)))
+                link  = clean_text(l.group(1))
+                pub   = parse_rss_date(d.group(1)) if d else ""
+                snip  = clean_text(re.sub(r"<[^>]+>", " ", desc.group(1)))[:300] if desc else ""
+                add({"title": title, "url": link, "lastmod": pub, "snippet": snip})
+        except Exception as exc:
+            log_error(f"[web_mentions] speaker={_speaker}", exc)
+
+    return results[:60]
 
 
 _RU_MONTHS = {
