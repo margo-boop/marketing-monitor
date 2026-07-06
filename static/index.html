@@ -518,14 +518,22 @@
   }
 
   // ─── DATA ───
-  const MONTHS = [
-    ["feb", "Февраль 2026"],
-    ["mar", "Март 2026"],
-    ["apr", "Апрель 2026"],
-    ["may", "Май 2026"],
-    ["jun", "Июнь 2026"],
-    ["jul", "Июль 2026"]
-  ];
+  // Месяцы генерируются автоматически: с февраля 2026 по текущий месяц.
+  // При смене месяца новая кнопка появляется сама.
+  const _MONTH_KEYS  = ["jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec"];
+  const _MONTH_NAMES = ["Январь","Февраль","Март","Апрель","Май","Июнь",
+                        "Июль","Август","Сентябрь","Октябрь","Ноябрь","Декабрь"];
+  function _buildMonths() {
+    const start = new Date(2026, 1, 1); // Февраль 2026
+    const now   = new Date();
+    const list  = [];
+    for (let d = new Date(start); d <= now; d.setMonth(d.getMonth() + 1)) {
+      const key = _MONTH_KEYS[d.getMonth()];
+      list.push([key, _MONTH_NAMES[d.getMonth()] + " " + d.getFullYear()]);
+    }
+    return list;
+  }
+  const MONTHS = _buildMonths();
 
   const COMPETITORS = [
     { key: "checkoffice",     name: "CheckOffice",       domain: "checkoffice.ru",     site: "https://checkoffice.ru" },
@@ -536,7 +544,7 @@
     { key: "imredi",          name: "Imredi",            domain: "imredi.biz",         site: "https://imredi.biz" }
   ];
 
-  let selectedMonth = "jul";
+  let selectedMonth = MONTHS[MONTHS.length - 1][0]; // последний доступный месяц
 
   function $(id) { return document.getElementById(id); }
 
