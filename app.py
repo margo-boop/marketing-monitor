@@ -189,12 +189,14 @@ COMPETITORS = [
         "domain": "mera-soft.ru",
         "site": "https://mera-soft.ru",
         "queries": ["мерасофт", "мерасофт чек лист"],
+        # Tilda-блог: статьи не попадают в sitemap — берём из Dzen-фида
+        "blog_feed": "https://dzen.ru/api/v3/launcher/export?channelName=merasoft&type=rss",
         "socials": {
             "telegram": "",
             "vk": "merasoft",
             "youtube": "",
-            "rutube": "",
-            "dzen": "",
+            "rutube": "69521007",
+            "dzen": "merasoft",
         },
     },
     {
@@ -1280,6 +1282,87 @@ def collect_site(comp, month=None):
                             sitemap_content.append(_r2)
                     except Exception:
                         pass
+
+        # --- Blog feed fallback (для Tilda и других JS-блогов без статей в sitemap) ---
+        if not sitemap_content and comp.get("blog_feed"):
+            try:
+                feed_raw = request_text(comp["blog_feed"], timeout=15)
+                feed_items = []
+                # Попытка 1: JSON (Dzen API возвращает application/json)
+                try:
+                    feed_data = json.loads(feed_raw)
+                    for key in ("items", "publications", "articles", "entries", "posts"):
+                        if isinstance(feed_data.get(key), list):
+                            feed_items = feed_data[key]
+                            break
+                    if not feed_items and isinstance(feed_data, list):
+                        feed_items = feed_data
+                except (ValueError, TypeError):
+                    pass
+                # Попытка 2: XML/RSS (стандартный Atom/RSS-формат)
+                if not feed_items:
+                    for block in re.findall(r"<item>(.*?)</item>", feed_raw, re.S | re.I):
+                        t_m = re.search(r"<title>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?</title>", block, re.S)
+                        l_m = re.search(r"<(?:origLink|link)>(.*?)</(?:origLink|link)>", block, re.S)
+                        d_m = re.search(r"<pubDate>(.*?)</pubDate>", block, re.S)
+                        if t_m and l_m:
+                            feed_items.append({
+                                "title":   clean_text(t_m.group(1)),
+                                "link":    clean_text(l_m.group(1)),
+                                "pubDate": d_m.group(1).strip() if d_m else "",
+                            })
+
+                _feed_unknown = []
+                for fi in feed_items:
+                    # Предпочитаем ссылку на оригинальный сайт (поле origLink / sourceUrl / originalUrl)
+                    url = (fi.get("origLink") or fi.get("sourceUrl") or fi.get("originalUrl") or
+                           fi.get("link") or fi.get("url") or "")
+                    if not url or not url.startswith("http"):
+                        continue
+                    title = (fi.get("title") or fi.get("name") or slug_title(url) or "")
+                    if isinstance(title, str):
+                        title = title[:180]
+                    raw_date = (fi.get("pubDate") or fi.get("publishedDate") or
+                                fi.get("isoDate") or fi.get("date") or fi.get("published") or "")
+                    lastmod = parse_rss_date(raw_date) if isinstance(raw_date, str) and raw_date else ""
+                    item = {"url": url, "title": title, "lastmod": lastmod}
+                    check = item_matches_month(item, mm)
+                    if check is True:
+                        sitemap_content.append(item)
+                    elif check is None and mm:
+                        _feed_unknown.append(item)
+                    elif not mm:
+                        sitemap_content.append(item)
+
+                # Для статей без известной даты — пробуем fetchить страницу
+                if _feed_unknown and mm:
+                    def _fetch_feed_date(item):
+                        try:
+                            page = request_text(item["url"], timeout=6)
+                            visible_date = extract_visible_date(page)
+                            if visible_date:
+                                item = dict(item)
+                                item["lastmod"] = visible_date
+                                if item_matches_month(item, mm) is True:
+                                    ptitle, _ = parse_title_description(page)
+                                    if ptitle:
+                                        item["title"] = ptitle[:180]
+                                    return item
+                        except Exception:
+                            pass
+                        return None
+                    from concurrent.futures import ThreadPoolExecutor as _TPEF, as_completed as _acF
+                    with _TPEF(max_workers=6) as _pF:
+                        _futsF = {_pF.submit(_fetch_feed_date, it): it for it in _feed_unknown[:15]}
+                        for _fF in _acF(_futsF, timeout=30):
+                            try:
+                                _rF = _fF.result()
+                                if _rF:
+                                    sitemap_content.append(_rF)
+                            except Exception:
+                                pass
+            except Exception as exc:
+                log_error(f"[collect_site] blog_feed {comp.get('blog_feed')}", exc)
 
         # --- HTML-парсинг главной + раздела блога (параллельно, до 3 доп. страниц) ---
         html_content = []
@@ -2367,7 +2450,12 @@ _PAGE_TYPES = [
 
 def classify_page(url):
     """Возвращает (label, color) по URL."""
-    path = urllib.parse.urlparse(url).path.lower()
+    parsed = urllib.parse.urlparse(url)
+    path = parsed.path.lower()
+    full = (parsed.netloc + parsed.path).lower()
+    # Dzen articles (dzen.ru/a/...) — всегда Статья
+    if "dzen.ru/a/" in full:
+        return "Статья", "#2196a8"
     for pattern, label, color in _PAGE_TYPES:
         if re.search(pattern, path, re.I):
             return label, color
