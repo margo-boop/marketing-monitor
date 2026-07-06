@@ -3489,15 +3489,16 @@ def _item_activity_stats(item):
 
 def generate_ai_interpretation(items, month_label):
     """
-    Вызывает Claude Haiku для качественной интерпретации данных мониторинга.
-    Читает ANTHROPIC_API_KEY из окружения. При ошибке возвращает пустую строку.
+    Вызывает Google Gemini Flash для качественной интерпретации данных мониторинга.
+    Читает GEMINI_API_KEY из окружения. При ошибке возвращает пустую строку.
+    Бесплатно: aistudio.google.com → Get API key.
     """
     import os
-    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+    api_key = os.environ.get("GEMINI_API_KEY", "")
     if not api_key:
         return ""
     try:
-        import anthropic as _anthropic
+        import google.generativeai as genai
     except ImportError:
         return ""
 
@@ -3553,14 +3554,10 @@ def generate_ai_interpretation(items, month_label):
     )
 
     try:
-        client = _anthropic.Anthropic(api_key=api_key)
-        msg = client.messages.create(
-            model="claude-haiku-4-5-20251001",
-            max_tokens=450,
-            timeout=30.0,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        return msg.content[0].text.strip()
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel("gemini-1.5-flash")
+        resp = model.generate_content(prompt)
+        return resp.text.strip()
     except Exception as exc:
         log_error("[ai_interpretation]", exc)
         return ""
