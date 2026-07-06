@@ -1210,43 +1210,12 @@ def extract_meta_date(markup):
 
 def extract_visible_date(markup):
     """
-    Ищет дату публикации. Приоритет:
-    1. Машиночитаемые теги (meta, JSON-LD, time datetime) — надёжнее всего
-    2. Видимый текст страницы (русские и числовые форматы)
+    Ищет дату публикации только в машиночитаемых тегах (meta, JSON-LD, time datetime).
+    Полный текст страницы намеренно НЕ сканируется: даты в сайдбарах, подвалах и
+    блоках «похожих статей» вызывают ложные совпадения по месяцу.
     Возвращает 'YYYY-MM-DD' или ''.
     """
-    # Приоритет 1: meta-теги и JSON-LD (работают даже на Tilda)
-    meta = extract_meta_date(markup)
-    if meta:
-        return meta
-
-    # Приоритет 2: видимый текст
-    clean = re.sub(r"<(script|style)[^>]*>.*?</\1>", " ", markup, flags=re.S | re.I)
-    clean = re.sub(r"<[^>]+>", " ", clean)
-    # Русская дата: «15 июня 2026»
-    m = _RU_MONTH_PAT.search(clean)
-    if m:
-        day, month_word, year = m.group(1), m.group(2).lower(), m.group(3)
-        mm = None
-        for prefix, num in _RU_MONTHS.items():
-            if month_word.startswith(prefix):
-                mm = num
-                break
-        if not mm and month_word.startswith("ма"):
-            mm = "05"
-        if mm:
-            return f"{year}-{mm}-{day.zfill(2)}"
-    # Числовая дата: «15.06.2026»
-    m = _NUM_DATE_PAT.search(clean)
-    if m:
-        d, mo, y = m.group(1), m.group(2), m.group(3)
-        if 1 <= int(mo) <= 12 and 1 <= int(d) <= 31:
-            return f"{y}-{mo}-{d}"
-    # ISO-дата в тексте: «2026-06-15»
-    m = _ISO_DATE_PAT.search(clean)
-    if m:
-        return f"{m.group(1)}-{m.group(2)}-{m.group(3)}"
-    return ""
+    return extract_meta_date(markup)
 
 
 @functools.lru_cache(maxsize=32)
