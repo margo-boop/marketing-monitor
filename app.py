@@ -442,12 +442,36 @@ def summarize_post_text(text):
     return sent[:180]
 
 
-def extract_analytical_description(page_html, comp_name):
+def extract_analytical_description(page_html, comp_name, speakers=None):
     """
     Читает страницу внешнего материала и возвращает аналитическое описание:
     «Комментарий [Имя] о ...» или суть публикации в одном предложении.
+    Если переданы speakers — сначала ищем известных представителей компании.
     """
-    # Автор — ищем по itemprop, class, JSON-LD
+    body_text = clean_text(re.sub(r'<[^>]+>', ' ', page_html))
+    sentences = re.split(r'(?<=[.!?])\s+', body_text)
+
+    # ── Шаг 1: известные спикеры компании (приоритет над общим автором) ──
+    comp_speaker = ""
+    if speakers:
+        body_lower = body_text.lower()
+        for sp in speakers:
+            if sp.lower() in body_lower:
+                comp_speaker = sp
+                break
+
+    if comp_speaker:
+        sp_lower = comp_speaker.lower()
+        sp_sents = [s.strip() for s in sentences if sp_lower in s.lower() and 20 < len(s) < 300]
+        if sp_sents:
+            # Предпочитаем предложение с прямой речью или глаголом цитирования
+            quote_sents = [s for s in sp_sents
+                           if re.search(r'сказал|заявил|отметил|рассказал|пояснил|добавил|считает|уверен', s, re.I)]
+            best = (quote_sents or sp_sents)[0]
+            return f"Комментарий {comp_speaker} — {best[:180]}"
+        return f"Комментарий {comp_speaker}"
+
+    # ── Шаг 2: автор статьи из мета-данных ───────────────────────────────
     author = ""
     for pat in [
         r'"author"\s*:\s*\{\s*"(?:@type[^}]+,\s*)"?name"?\s*:\s*"([^"]{5,60})"',
@@ -459,12 +483,11 @@ def extract_analytical_description(page_html, comp_name):
         m = re.search(pat, page_html, re.I | re.S)
         if m:
             candidate = clean_text(re.sub(r'<[^>]+>', '', m.group(1)))
-            # Фильтруем явный мусор
             if candidate and not re.search(r'http|©|www|\.ru|\.com', candidate):
                 author = candidate[:60]
                 break
 
-    # Тип материала
+    # ── Шаг 3: тип материала ──────────────────────────────────────────────
     mat_type = "Материал"
     if re.search(r'комментар|эксперт|мнение', page_html, re.I):
         mat_type = "Комментарий"
@@ -477,9 +500,7 @@ def extract_analytical_description(page_html, comp_name):
     elif re.search(r'пресс.?рели[зс]|пресс.?релиз|press.?release', page_html, re.I):
         mat_type = "Пресс-релиз"
 
-    # Ищем предложение с упоминанием компании в тексте страницы
-    body_text = clean_text(re.sub(r'<[^>]+>', ' ', page_html))
-    sentences = re.split(r'(?<=[.!?])\s+', body_text)
+    # ── Шаг 4: предложение с упоминанием компании ─────────────────────────
     comp_lower = comp_name.lower()
     relevant = [
         s.strip() for s in sentences
@@ -801,6 +822,12 @@ _MENTION_DOMAINS = {
     "executive.ru":    ("Авторская колонка", "#6a1b9a"),
     "therunet.com":    ("Новость в СМИ",     "#ad1457"),
     "prodmag.ru":      ("Новость в СМИ",     "#ad1457"),
+    # новые источники (З1)
+    "retailtech.ru":   ("Новость в СМИ",     "#ad1457"),
+    "new-retail.ru":   ("Новость в СМИ",     "#ad1457"),
+    "nrcases.ru":      ("Кейс/Внедрение",    "#2e7d32"),
+    "hightech.plus":   ("Комментарий в СМИ", "#c62828"),
+    "globalcio.ru":    ("Новость в СМИ",     "#ad1457"),
 }
 
 # Ключевые слова в тексте статьи → уточняем категорию
@@ -885,8 +912,8 @@ def collect_web_mentions(comp, month):
                 ptitle, _ = parse_title_description(page)
                 if ptitle and not item.get("title"):
                     item["title"] = ptitle[:180]
-                # Генерируем аналитическое описание
-                analytical = extract_analytical_description(page, comp["name"])
+                # Генерируем аналитическое описание (с учётом спикеров компании)
+                analytical = extract_analytical_description(page, comp["name"], comp.get("speakers", []))
                 if analytical:
                     item["snippet"] = analytical
             except Exception:
@@ -2719,7 +2746,13 @@ def mention_item_html(x):
     badge = f'<span style="font-size:10px;padding:1px 6px;border-radius:3px;background:{color};color:#fff;margin-right:5px">{e(label)}</span>'
     source_tag = f'<span style="font-size:10px;color:#666;margin-right:4px">[{e(dom)}]</span>'
     date_tag = f' <span style="font-size:11px;color:#888;margin-left:6px">{e(date_str)}</span>' if date_str else ""
-    snip_tag = f'<div style="font-size:11px;color:#555;margin:2px 0 0 0;padding-left:8px">{e(snippet[:200])}</div>' if snippet else ""
+    # 💬 маркер для экспертных цитат; курсив для читаемости
+    if snippet and re.match(r"Комментарий ", snippet):
+        snip_tag = f'<div style="font-size:11px;color:#444;margin:3px 0 0 0;padding-left:8px;font-style:italic">💬 {e(snippet[:250])}</div>'
+    elif snippet:
+        snip_tag = f'<div style="font-size:11px;color:#555;margin:2px 0 0 0;padding-left:8px">{e(snippet[:250])}</div>'
+    else:
+        snip_tag = ""
     return f'<li>{badge}{source_tag}<a href="{e(url)}" target="_blank">{e(title)}</a>{date_tag}{snip_tag}</li>'
 
 
