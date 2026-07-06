@@ -492,7 +492,7 @@ def extract_analytical_description(page_html, comp_name):
 
 _TRANSLIT_MAP = {
     "shh":"щ","sh":"ш","ch":"ч","zh":"ж","ts":"ц","ya":"я","yu":"ю","yo":"ё",
-    "ye":"е","yi":"ый","je":"е","jo":"ё","ju":"ю","ja":"я",
+    "ye":"е","yi":"ый","iy":"ий","je":"е","jo":"ё","ju":"ю","ja":"я",
     "sch":"щ","kh":"х","gh":"г",
     "a":"а","b":"б","v":"в","g":"г","d":"д","e":"е","z":"з","i":"и",
     "j":"й","k":"к","l":"л","m":"м","n":"н","o":"о","p":"п","r":"р",
@@ -544,10 +544,20 @@ def slug_title(href):
     if not seg:
         return ""
     words = seg.split()
+    # UUID-паттерн: более половины сегментов — hex-строки 4+ символов С буквами a-f
+    hex_count = sum(
+        1 for w in words
+        if re.match(r'^[0-9a-f]{4,}$', w.lower()) and re.search(r'[a-f]', w.lower())
+    )
+    if len(words) >= 3 and hex_count >= len(words) // 2:
+        return ""
+    # Чисто числовой ID (Telegram post ID и т.п.) → не транслитерируем
+    if len(words) == 1 and re.match(r'^\d+$', words[0]):
+        return ""
     decoded_words = [_translit_word(w) for w in words]
     result = " ".join(decoded_words).strip()
-    # Склеиваем версионные номера: "6 7 0" → "6.7.0"
-    result = re.sub(r"\d+(?:\s+\d+)+", lambda m: m.group(0).replace(" ", "."), result)
+    # Склеиваем версионные номера: "6 7 0" → "6.7.0", "23 1592" → "23.1592"
+    result = re.sub(r'\b\d{1,4}(?:\s+\d{1,4}){1,4}\b', lambda m: m.group(0).replace(" ", "."), result)
     return result[:1].upper() + result[1:] if result else ""
 
 
@@ -2412,6 +2422,12 @@ def mention_item_html(x):
     return f'<li>{badge}{source_tag}<a href="{e(url)}" target="_blank">{e(title)}</a>{date_tag}{snip_tag}</li>'
 
 
+def _is_uuid_url(url: str) -> bool:
+    """True если URL содержит UUID-слаг (Kontur.Stream и подобные)."""
+    path = urllib.parse.urlparse(url or "").path
+    return bool(re.search(r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}', path, re.I))
+
+
 def clean_event_title(ev: dict):
     """Извлекает чистый заголовок и роль из сырого TG-текста мероприятия.
     Возвращает (title_str, role_str).
@@ -2419,81 +2435,94 @@ def clean_event_title(ev: dict):
     raw = (ev.get("title", "") or "").strip()
     url = ev.get("url", "") or ev.get("reg_link", "") or ev.get("rec_link", "")
 
+    # Убираем эмодзи-восклицательные знаки из начала (❗️❗️❗️ВАЖНО:...)
+    _clean_raw = re.sub(r'^[❗️⚠️🔴🟡⭐]+\s*', '', raw).strip()
+
     # Извлекаем роль: "роль: Спикер" / "роль: Участник"
     role = ""
     m_role = re.search(r"роль[:\s]+([А-Яа-яЁёa-zA-Z][^\s.,;/]{1,30})", raw, re.I)
     if m_role:
         role = m_role.group(1).strip()
 
-    # Шаблонный пост из TG: "Вебинар, роль: ... На этой неделе мы: ..."
+    # Шаблонный TG-пост: "Вебинар, роль: X. [основной текст]"
     if re.match(r"[Вв]ебинар[,\s]", raw):
-        # Пробуем вытащить тему из URL-слага
-        slug = slug_title(url) if url else ""
-        if slug and len(slug) > 5 and not re.match(r"^(t\.me|telegram|tpost)", slug.lower()):
-            return slug[:120], role
-        # Ищем "Тема:" внутри текста
-        m_topic = re.search(r"[Тт]ема[:\s]+([^.\n]+)", raw)
-        if m_topic:
-            return m_topic.group(1).strip()[:120], role
+        # Убираем преамбулу "Вебинар, роль: Участник."
+        after_prefix = re.sub(r"^[Вв]ебинар,?\s*(?:роль[^.]+\.?\s*)?", "", raw).strip()
+        # Убираем "На этой неделе мы:" и всё после (это недельный дайджест, не тема вебинара)
+        after_prefix = re.split(r"[Нн]а этой неделе|[Нн]а прошлой неделе", after_prefix)[0].strip()
+        # Убираем emoji-артефакты
+        after_prefix = re.sub(r"[✅✔️🔥⚡📌➡️❗️⚠️]\s*", "", after_prefix).strip().rstrip(".,;:")
+        after_prefix = re.sub(r"\s{2,}", " ", after_prefix).strip()
+
+        if after_prefix and len(after_prefix) > 5:
+            return after_prefix[:180], role
+
+        # Если текст после префикса пустой — пробуем URL (только не UUID)
+        if url and not _is_uuid_url(url):
+            slug = slug_title(url)
+            if slug and len(slug) > 5:
+                return slug[:120], role
+
         return "Вебинар", role
 
-    # Обычный заголовок: убираем стандартные шаблонные хвосты
-    clean = re.split(r"[Нн]а этой неделе|[Нн]а прошлой неделе|✅|🔥|⚡", raw)[0]
-    clean = re.sub(r"[✅✔️🔥⚡📌➡️]\s*", "", clean).strip().rstrip(".,;:")
+    # Обычный заголовок: убираем шаблонные хвосты и emoji
+    clean = re.sub(r'^[❗️⚠️🔴⭐]+\s*(?:[Вв][Аа][Жж][Нн][Оо][!:.]?\s*)?', '', raw).strip()
+    clean = re.split(r"[Нн]а этой неделе|[Нн]а прошлой неделе", clean)[0]
+    clean = re.sub(r"[✅✔️🔥⚡📌➡️❗️]\s*", "", clean).strip().rstrip(".,;:")
     clean = re.sub(r"\s{2,}", " ", clean).strip()
-    return (clean[:120] or raw[:120]), role
+    return (clean[:180] or raw[:180]), role
 
 
 def event_item_html(ev):
-    """Форматирует мероприятие как карточку: дата · тема · роль · ссылки."""
+    """Форматирует мероприятие как строку нумерованного списка: дата — тема [ссылка]."""
     date_str  = format_date(ev.get("lastmod", ""))
     reg_link  = ev.get("reg_link", "")
     rec_link  = ev.get("rec_link", "")
     url       = ev.get("url", "")
     main_link = reg_link or rec_link or url
 
-    # Чистый заголовок и роль
     clean_title, role = clean_event_title(ev)
     if not clean_title:
-        clean_title = slug_title(url) or "Мероприятие"
+        clean_title = "Мероприятие"
 
-    date_badge = (
-        f'<span style="font-size:11px;color:#e65100;font-weight:700;'
-        f'background:#fff3e0;padding:2px 7px;border-radius:4px;margin-right:8px">'
-        f'{e(date_str)}</span>'
+    # Дата
+    date_part = (
+        f'<span style="color:#e65100;font-size:11px;font-weight:600;margin-right:6px">'
+        f'{e(date_str)}</span>— '
         if date_str else ""
     )
+    # Роль-бейдж
     role_badge = (
         f'<span style="font-size:10px;color:#fff;background:#7b1fa2;'
-        f'padding:2px 7px;border-radius:3px;margin-right:8px">{e(role)}</span>'
+        f'padding:1px 6px;border-radius:3px;margin-right:6px;white-space:nowrap">'
+        f'{e(role)}</span>'
         if role else ""
     )
+    # Заголовок
     title_html = (
         f'<a href="{e(main_link)}" target="_blank" '
-        f'style="color:#1a1a1a;font-weight:600;font-size:13px;text-decoration:none">'
+        f'style="color:#1a1a1a;font-weight:500;font-size:13px">'
         f'{e(clean_title)}</a>'
         if main_link else
-        f'<span style="font-weight:600;font-size:13px">{e(clean_title)}</span>'
+        f'<span style="font-size:13px">{e(clean_title)}</span>'
     )
-    extra = ""
-    if rec_link and rec_link != main_link:
-        extra = (
-            f' <a href="{e(rec_link)}" target="_blank" '
-            f'style="font-size:11px;color:#1565c0;margin-left:6px">▶ Запись</a>'
-        )
-    reg_btn = ""
+    # Доп. ссылки
+    links = ""
     if reg_link and reg_link == main_link:
-        reg_btn = (
+        links = (
             f' <a href="{e(reg_link)}" target="_blank" '
-            f'style="font-size:11px;color:#fff;background:#1a73e8;padding:2px 8px;'
-            f'border-radius:4px;text-decoration:none;margin-left:6px">Регистрация</a>'
+            f'style="font-size:11px;color:#1565c0;white-space:nowrap">[Регистрация]</a>'
+        )
+    if rec_link and rec_link != main_link:
+        links += (
+            f' <a href="{e(rec_link)}" target="_blank" '
+            f'style="font-size:11px;color:#1565c0;white-space:nowrap">[Запись]</a>'
         )
 
     return (
-        f'<div style="border:1px solid #fce4d6;border-radius:8px;padding:10px 14px;'
-        f'margin-bottom:8px;background:#fffaf7">'
-        f'<div>{date_badge}{role_badge}{title_html}{reg_btn}{extra}</div>'
-        f'</div>'
+        f'<li style="padding:7px 0;border-bottom:1px solid #f5f5f5;font-size:13px;line-height:1.5">'
+        f'{date_part}{role_badge}{title_html}{links}'
+        f'</li>'
     )
 
 
@@ -2671,7 +2700,7 @@ def render_report_html(month, items):
 
     CSS = """
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;color:#1a1a1a;background:#f8f9fb;margin:0;font-size:14px;line-height:1.6}
-.page{max-width:960px;margin:0 auto;padding:32px 36px}
+.page{max-width:1200px;margin:0 auto;padding:32px 36px}
 /* Шапка */
 .report-header{background:#fff;border:1px solid #e2e5ee;border-radius:10px;padding:20px 24px 16px;margin-bottom:24px;display:flex;align-items:flex-start;justify-content:space-between}
 .report-title{font-size:22px;font-weight:600;color:#1a1a1a;margin:0 0 4px}
@@ -2977,8 +3006,11 @@ td.left{text-align:left}
                 social_html = '<p class="empty-note">Соцсети не определены или данных нет.</p>'
 
         # ── Мероприятия ──────────────────────────────────────────────
-        events_html = "".join(event_item_html(ev) for ev in item.events)
-        events_block = events_html  # пустую секцию скроем в шаблоне
+        if item.events:
+            events_html = "".join(event_item_html(ev) for ev in item.events)
+            events_block = f'<ol style="padding-left:22px;margin:0">{events_html}</ol>'
+        else:
+            events_block = ""
 
         # ── Обновления ───────────────────────────────────────────────
         upd_block = update_block_html(item.updates)
