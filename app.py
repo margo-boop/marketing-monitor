@@ -501,15 +501,38 @@ _TRANSLIT_MAP = {
     "jeffektivnyj":"эффективный",
 }
 
+# Частотные английские слова в URL-слагах, которые не стоит транслитерировать
+_ENGLISH_SLUG_WORDS = frozenset({
+    "mystery", "shopper", "shoper", "shop", "shopping", "store", "retail",
+    "check", "checklist", "case", "study", "guide", "tips", "blog", "post",
+    "digital", "smart", "cloud", "data", "api", "release", "feature",
+    "the", "and", "for", "how", "why", "what", "top", "best", "free", "new",
+    "management", "analytics", "platform", "solution", "integration",
+    "mobile", "desktop", "app", "web", "software", "system", "service",
+    "about", "contact", "team", "company", "product", "products", "news",
+    "market", "marketing", "report", "review", "video", "image", "photo",
+})
+
+
 def _translit_word(word: str) -> str:
     """Пробует перевести транслитерированное слово обратно в кириллицу."""
-    # Если уже содержит кириллицу — оставляем
+    # Уже содержит кириллицу — оставляем
     if re.search(r"[а-яёА-ЯЁ]", word):
         return word
-    # Если слово полностью латинское — применяем транслит по длинным паттернам сначала
-    result = word.lower()
+    wl = word.lower()
+    # Явно английские слова — не транслитерируем
+    if wl in _ENGLISH_SLUG_WORDS:
+        return word
+    # Английские суффиксы, которых нет в русском транслите
+    if re.search(r"(tion|sion|ness|ment|ance|ence|ous$|ive$)$", wl):
+        return word
+    # Применяем транслит (длинные паттерны первыми)
+    result = wl
     for lat, cyr in sorted(_TRANSLIT_MAP.items(), key=lambda x: -len(x[0])):
         result = result.replace(lat, cyr)
+    # Если остались латинские буквы (напр. 'w') — слово не транслитерируется корректно
+    if re.search(r"[a-z]", result):
+        return word
     return result
 
 
@@ -520,10 +543,11 @@ def slug_title(href):
     seg = re.sub(r"[-_]+", " ", seg).strip()
     if not seg:
         return ""
-    # Если слово полностью латинское без пробелов — пробуем транслит
     words = seg.split()
-    decoded = " ".join(_translit_word(w) for w in words)
-    result = decoded.strip()
+    decoded_words = [_translit_word(w) for w in words]
+    result = " ".join(decoded_words).strip()
+    # Склеиваем версионные номера: "6 7 0" → "6.7.0"
+    result = re.sub(r"\d+(?:\s+\d+)+", lambda m: m.group(0).replace(" ", "."), result)
     return result[:1].upper() + result[1:] if result else ""
 
 
@@ -2517,6 +2541,9 @@ def update_block_html(updates):
             f'<span style="color:#999;font-size:11px">{e(date_str)}</span>'
             if date_str else ""
         )
+        # Если нет title — берём первый пункт как краткое описание
+        if not title and items:
+            title = items[0][:80]
         title_text = e(title) if (title and title not in version) else ""
         src_link = (
             f'<a href="{e(url)}" target="_blank" style="font-size:11px;color:#1565c0;margin-left:8px">↗ источник</a>'
@@ -2731,7 +2758,27 @@ td.left{text-align:left}
 .exec-row{display:flex;align-items:flex-start;gap:10px;padding:6px 0;border-bottom:1px solid #f0f3fb;font-size:13px;line-height:1.5;color:#333}
 .exec-row:last-child{border-bottom:none}
 .exec-icon{font-size:16px;flex-shrink:0;min-width:22px;line-height:1.4}
-@media print{.page{padding:0}@page{margin:12mm 16mm}.charts{grid-template-columns:1fr 1fr}.comp-card{break-inside:avoid}}
+@media print{
+  .page{padding:0}
+  @page{margin:12mm 16mm}
+  /* Каждый конкурент — с новой страницы */
+  .comp-card+.comp-card{page-break-before:always}
+  /* Executive summary и аналитика — не разрывать */
+  .exec-summary,.analytics-section,.summary-section{break-inside:avoid}
+  /* Секции карточки — стараемся не разрывать */
+  .section{break-inside:avoid}
+  /* Графики в 2 колонки */
+  .charts{grid-template-columns:1fr 1fr}
+  /* Убираем фоновые цвета компонентов при печати */
+  .comp-header{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  /* Ссылки — чёрные в печати */
+  a{color:#000!important;text-decoration:none!important}
+  /* Убираем тень */
+  .comp-card,.exec-summary,.analytics-section,.summary-section{box-shadow:none!important}
+  /* TOC скрываем при печати */
+  .toc{display:none}
+  .report-header{flex-direction:column}
+}
 @media(max-width:760px){.charts{grid-template-columns:1fr}.report-header{flex-direction:column}.toc{width:auto}}
 """
 
@@ -3232,73 +3279,155 @@ def render_pdf(month, items, pdf_path):
     if colors is None:
         raise RuntimeError("reportlab is not installed")
     font = setup_fonts()
-    doc = SimpleDocTemplate(str(pdf_path), pagesize=A4, leftMargin=16 * mm, rightMargin=16 * mm, topMargin=14 * mm, bottomMargin=14 * mm)
+    month_label = MONTHS.get(month, month)
+    doc = SimpleDocTemplate(
+        str(pdf_path), pagesize=A4,
+        leftMargin=16 * mm, rightMargin=16 * mm,
+        topMargin=14 * mm, bottomMargin=14 * mm,
+    )
     styles = getSampleStyleSheet()
-    styles.add(ParagraphStyle(name="RuTitle", parent=styles["Title"], fontName=font, fontSize=18, leading=22, alignment=0))
-    styles.add(ParagraphStyle(name="RuH2", parent=styles["Heading2"], fontName=font, fontSize=22, leading=26, textColor=colors.HexColor("#4f77ff")))
-    styles.add(ParagraphStyle(name="RuBody", parent=styles["BodyText"], fontName=font, fontSize=10.5, leading=14))
-    styles.add(ParagraphStyle(name="RuSmall", parent=styles["BodyText"], fontName=font, fontSize=8.5, leading=11, textColor=colors.HexColor("#666666")))
-    story = [Paragraph(f"{MONTHS.get(month, month)} - Мониторинг активности конкурентов", styles["RuTitle"]), Spacer(1, 8)]
-    story.append(Paragraph("Отчёт содержит только реально загруженные/собранные данные. SpyWords и Вордстат не выдумываются.", styles["RuSmall"]))
-    story.append(Spacer(1, 10))
-    for item in items:
-        story.append(Paragraph(item.name, styles["RuH2"]))
-        table_data = [
-            ["Поисковая система", "TOP-50", "TOP-10", "Трафик", "URL"],
-            ["Яндекс", fmt(item.spywords.get("yandex_top50")), fmt(item.spywords.get("yandex_top10")), fmt(item.spywords.get("search_traffic_yandex")), fmt(item.spywords.get("unique_urls_yandex"))],
-            ["Google", fmt(item.spywords.get("google_top50")), fmt(item.spywords.get("google_top10")), fmt(item.spywords.get("search_traffic_google")), fmt(item.spywords.get("unique_urls_google"))],
-        ]
-        table = Table(table_data, repeatRows=1)
-        table.setStyle(TableStyle([
-            ("FONTNAME", (0, 0), (-1, -1), font),
-            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#f3f5fb")),
-            ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#dfe3ec")),
-            ("ALIGN", (1, 1), (-1, -1), "CENTER"),
-            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-        ]))
-        story.extend([table, Spacer(1, 8)])
-        story.append(Paragraph(f"Анализ домена {item.domain}", styles["RuBody"]))
-        if item.wordstat:
-            story.append(Paragraph("Вордстат:", styles["RuBody"]))
-            story.append(ListFlowable([ListItem(Paragraph(f"«{k}» - {fmt(v)} показов в месяц", styles["RuBody"])) for k, v in item.wordstat.items()], bulletType="bullet"))
-        else:
-            story.append(Paragraph("Вордстат: реальная выгрузка не загружена.", styles["RuBody"]))
-        if item.content:
-            story.append(Paragraph("Контент на сайте:", styles["RuBody"]))
-            story.append(ListFlowable([ListItem(Paragraph(f"{x.get('title', '')} {x.get('url', '')}", styles["RuBody"])) for x in item.content[:10]], bulletType="1"))
-        else:
-            story.append(Paragraph("Контент на сайте: публично не найден за этот месяц.", styles["RuBody"]))
-        if item.external:
-            story.append(Paragraph("Сторонние публикации:", styles["RuBody"]))
-            story.append(ListFlowable([ListItem(Paragraph(f"{x.get('title', '')} {x.get('url', '')}", styles["RuBody"])) for x in item.external[:10]], bulletType="1"))
-        else:
-            story.append(Paragraph("Сторонние публикации: не найдено за этот месяц.", styles["RuBody"]))
-        if item.social:
-            story.append(Paragraph("Соц. сети:", styles["RuBody"]))
-            story.append(ListFlowable([ListItem(Paragraph(x, styles["RuBody"])) for x in item.social], bulletType="1"))
-        story.append(Spacer(1, 14))
-    story.append(PageBreak())
-    story.append(Paragraph("Вывод: маркетинговая активность конкурентов", styles["RuH2"]))
-    # Сводная таблица активности
-    act_table_data = [["Компания", "Статьи на сайте", "Сторон. публ.", "Соц. сети", "Обновления"]]
-    for item in items:
-        act_table_data.append([
-            item.name,
-            str(len(item.content)),
-            str(len(item.external)),
-            str(len([s for s in item.social if s.strip()])),
-            item.site_summary[:60] + "…" if item.site_summary and len(item.site_summary) > 60 else (item.site_summary or "—"),
+    styles.add(ParagraphStyle(name="RuTitle",  parent=styles["Title"],    fontName=font, fontSize=18, leading=22, alignment=0))
+    styles.add(ParagraphStyle(name="RuH2",     parent=styles["Heading2"], fontName=font, fontSize=14, leading=18, textColor=colors.HexColor("#1a1a2e"), spaceBefore=14))
+    styles.add(ParagraphStyle(name="RuH3",     parent=styles["Heading3"], fontName=font, fontSize=11, leading=14, textColor=colors.HexColor("#4f77ff"), spaceBefore=8))
+    styles.add(ParagraphStyle(name="RuBody",   parent=styles["BodyText"], fontName=font, fontSize=10,  leading=14))
+    styles.add(ParagraphStyle(name="RuSmall",  parent=styles["BodyText"], fontName=font, fontSize=8.5, leading=11, textColor=colors.HexColor("#666666")))
+    styles.add(ParagraphStyle(name="RuBrief",  parent=styles["BodyText"], fontName=font, fontSize=10,  leading=14, textColor=colors.HexColor("#1a5c35"), backColor=colors.HexColor("#f0fdf4"), borderPadding=6))
+
+    _TS = lambda: TableStyle([
+        ("FONTNAME",    (0, 0), (-1, -1), font),
+        ("FONTSIZE",    (0, 0), (-1, -1), 9),
+        ("BACKGROUND",  (0, 0), (-1, 0),  colors.HexColor("#f3f5fb")),
+        ("GRID",        (0, 0), (-1, -1), 0.4, colors.HexColor("#dfe3ec")),
+        ("ALIGN",       (1, 1), (-1, -1), "CENTER"),
+        ("VALIGN",      (0, 0), (-1, -1), "MIDDLE"),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#fafbff")]),
+    ])
+    _EDITORIAL_LABELS = {"Статья", "Кейс", "Новость", "Мероприятие", "Обновление", "Партнёрство"}
+
+    story = [
+        Paragraph(f"{month_label} — Мониторинг активности конкурентов", styles["RuTitle"]),
+        Spacer(1, 6),
+        Paragraph("Данные собраны автоматически. SpyWords и Вордстат показываются только при наличии реальных данных.", styles["RuSmall"]),
+        Spacer(1, 10),
+    ]
+
+    # ── Сводная таблица ──────────────────────────────────────────────────────
+    story.append(Paragraph("Сводная таблица активности", styles["RuH2"]))
+    tbl_data = [["Компания", "Статьи", "TG-посты", "Вебинары", "Обновления", "Упоминания", "Итого"]]
+    stats_all = [{"item": it, **_item_activity_stats(it)} for it in items]
+    for s in sorted(stats_all, key=lambda x: x["total"], reverse=True):
+        tbl_data.append([
+            s["item"].name,
+            str(s["blog"]) if s["blog"] else "—",
+            str(s["posts"]) if s["posts"] else "—",
+            str(s["events"]) if s["events"] else "—",
+            str(s["updates"]) if s["updates"] else "—",
+            str(s["ext"]) if s["ext"] else "—",
+            str(s["total"]) if s["total"] else "0",
         ])
-    act_table = Table(act_table_data, repeatRows=1)
-    act_table.setStyle(TableStyle([
-        ("FONTNAME", (0, 0), (-1, -1), font),
-        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#f3f5fb")),
-        ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#dfe3ec")),
-        ("ALIGN", (1, 0), (-1, -1), "CENTER"),
-        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-        ("FONTSIZE", (0, 0), (-1, -1), 9),
-    ]))
-    story.extend([act_table, Spacer(1, 12)])
+    tbl = Table(tbl_data, repeatRows=1, hAlign="LEFT")
+    tbl.setStyle(_TS())
+    story.extend([tbl, Spacer(1, 16), PageBreak()])
+
+    # ── Карточка каждого конкурента ──────────────────────────────────────────
+    for s in stats_all:
+        item = s["item"]
+        editorial = s["editorial"]
+        relevant_ext = [x for x in item.external if is_relevant_mention(x, item.name)]
+
+        # Заголовок
+        story.append(Paragraph(f"{item.name}  ·  {item.domain}", styles["RuH2"]))
+
+        # Краткий вывод
+        brief_parts = []
+        if s["blog"]:    brief_parts.append(f"{s['blog']} статей")
+        if s["posts"]:   brief_parts.append(f"{s['posts']} TG-постов")
+        if s["events"]:  brief_parts.append(f"{s['events']} мероприятий")
+        if s["updates"]: brief_parts.append(f"{s['updates']} обновлений")
+        brief_text = (", ".join(brief_parts) + ".") if brief_parts else "Активности не обнаружено."
+        story.append(Paragraph(brief_text, styles["RuBrief"]))
+        story.append(Spacer(1, 8))
+
+        # SpyWords (только если есть)
+        y50 = item.spywords.get("yandex_top50")
+        g50 = item.spywords.get("google_top50")
+        if any(v is not None for v in [y50, item.spywords.get("yandex_top10"), g50, item.spywords.get("google_top10")]):
+            story.append(Paragraph("Показатели сайта", styles["RuH3"]))
+            spy_data = [
+                ["Система", "TOP-50", "TOP-10", "Трафик", "Уник. URL"],
+                ["Яндекс", fmt(item.spywords.get("yandex_top50")), fmt(item.spywords.get("yandex_top10")), fmt(item.spywords.get("search_traffic_yandex")), fmt(item.spywords.get("unique_urls_yandex"))],
+                ["Google", fmt(item.spywords.get("google_top50")), fmt(item.spywords.get("google_top10")), fmt(item.spywords.get("search_traffic_google")), fmt(item.spywords.get("unique_urls_google"))],
+            ]
+            spy_tbl = Table(spy_data, repeatRows=1, hAlign="LEFT")
+            spy_tbl.setStyle(_TS())
+            story.extend([spy_tbl, Spacer(1, 6)])
+
+        # Контент
+        if editorial:
+            story.append(Paragraph(f"📝 Контент на сайте ({len(editorial)} публикаций)", styles["RuH3"]))
+            story.append(ListFlowable(
+                [ListItem(Paragraph(
+                    f"{x.get('title', '') or slug_title(x.get('url',''))}  [{format_date(x.get('lastmod',''))}]",
+                    styles["RuBody"]
+                )) for x in editorial[:8]],
+                bulletType="bullet", leftIndent=12,
+            ))
+            story.append(Spacer(1, 4))
+
+        # Соцсети
+        active_chs = [ch for ch in item.social_channels if len(ch.get("posts", [])) > 0]
+        if active_chs:
+            story.append(Paragraph("📣 Социальные сети", styles["RuH3"]))
+            for ch in active_chs:
+                n = len(ch.get("posts", []))
+                story.append(Paragraph(
+                    f"{ch.get('platform','')} @{ch.get('handle','')} — {n} постов",
+                    styles["RuBody"]
+                ))
+            story.append(Spacer(1, 4))
+
+        # Мероприятия
+        if item.events:
+            story.append(Paragraph(f"🎙 Мероприятия ({len(item.events)})", styles["RuH3"]))
+            for ev in item.events:
+                clean_t, role = clean_event_title(ev)
+                date_str = format_date(ev.get("lastmod", ""))
+                label = f"{date_str} — {clean_t}" if date_str else clean_t
+                if role: label += f" [{role}]"
+                story.append(Paragraph(f"• {label}", styles["RuBody"]))
+            story.append(Spacer(1, 4))
+
+        # Обновления
+        if item.updates:
+            story.append(Paragraph(f"🔄 Обновления в продукте ({len(item.updates)})", styles["RuH3"]))
+            for upd in item.updates:
+                ver   = upd.get("version", "")
+                title = upd.get("title", "")
+                date  = format_date(upd.get("date", ""))
+                hdr   = " ".join(x for x in [ver, date, title] if x)
+                story.append(Paragraph(f"• {hdr}", styles["RuBody"]))
+                clean_items = [_clean_update_item(it) for it in upd.get("items", [])[:4]]
+                for ci in [x for x in clean_items if x]:
+                    story.append(Paragraph(f"    — {ci}", styles["RuSmall"]))
+            story.append(Spacer(1, 4))
+
+        # Упоминания
+        if relevant_ext:
+            story.append(Paragraph(f"📰 Упоминания в СМИ ({len(relevant_ext)})", styles["RuH3"]))
+            story.append(ListFlowable(
+                [ListItem(Paragraph(
+                    f"{x.get('title', '') or x.get('url','')}",
+                    styles["RuBody"]
+                )) for x in relevant_ext[:6]],
+                bulletType="bullet", leftIndent=12,
+            ))
+
+        story.extend([Spacer(1, 14), PageBreak()])
+
+    # Убираем последний PageBreak
+    if story and isinstance(story[-1], PageBreak):
+        story.pop()
+
     doc.build(story)
 
 
