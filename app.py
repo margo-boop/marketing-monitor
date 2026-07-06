@@ -1397,8 +1397,8 @@ def collect_site(comp, month=None):
                     except Exception:
                         pass
 
-        # --- Blog feed fallback (для Tilda и других JS-блогов без статей в sitemap) ---
-        if not sitemap_content and comp.get("blog_feed"):
+        # --- Blog feed (Tilda/Dzen): добавляем статьи поверх sitemap, они не пересекаются ---
+        if comp.get("blog_feed"):
             try:
                 feed_raw = request_text(comp["blog_feed"], timeout=15)
                 feed_items = []
