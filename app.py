@@ -2912,9 +2912,23 @@ td.left{text-align:left}
                 )
             if pages_only:
                 extra_count = len(pages_only)
+                pages_id = f"pages_{e(item.key)}"
+                pages_li = "".join(content_item_html(x) for x in pages_only)
                 parts.append(
                     f'<p style="font-size:12px;color:#aaa;margin:6px 0 0">'
-                    f'+ ещё {extra_count} стр. сайта обновлено</p>'
+                    f'<a href="javascript:void(0)" onclick="'
+                    f'var el=document.getElementById(\'{pages_id}\');'
+                    f'var btn=document.getElementById(\'{pages_id}_btn\');'
+                    f'if(el.style.display===\'none\'){{el.style.display=\'block\';btn.textContent=\'▲ скрыть\';}}'
+                    f'else{{el.style.display=\'none\';btn.textContent=\'▼ показать\';}}" '
+                    f'style="color:#aaa;text-decoration:none">'
+                    f'+ {extra_count} стр. сайта обновлено '
+                    f'<span id="{pages_id}_btn" style="font-size:10px;background:#f0f0f0;'
+                    f'padding:1px 6px;border-radius:3px;color:#888">▼ показать</span>'
+                    f'</a></p>'
+                    f'<div id="{pages_id}" style="display:none;margin-top:6px">'
+                    f'<ul class="items-list">{pages_li}</ul>'
+                    f'</div>'
                 )
             cnt_html = "".join(parts)
         else:
