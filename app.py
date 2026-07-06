@@ -2388,62 +2388,123 @@ def mention_item_html(x):
     return f'<li>{badge}{source_tag}<a href="{e(url)}" target="_blank">{e(title)}</a>{date_tag}{snip_tag}</li>'
 
 
+def clean_event_title(ev: dict):
+    """Извлекает чистый заголовок и роль из сырого TG-текста мероприятия.
+    Возвращает (title_str, role_str).
+    """
+    raw = (ev.get("title", "") or "").strip()
+    url = ev.get("url", "") or ev.get("reg_link", "") or ev.get("rec_link", "")
+
+    # Извлекаем роль: "роль: Спикер" / "роль: Участник"
+    role = ""
+    m_role = re.search(r"роль[:\s]+([А-Яа-яЁёa-zA-Z][^\s.,;/]{1,30})", raw, re.I)
+    if m_role:
+        role = m_role.group(1).strip()
+
+    # Шаблонный пост из TG: "Вебинар, роль: ... На этой неделе мы: ..."
+    if re.match(r"[Вв]ебинар[,\s]", raw):
+        # Пробуем вытащить тему из URL-слага
+        slug = slug_title(url) if url else ""
+        if slug and len(slug) > 5 and not re.match(r"^(t\.me|telegram|tpost)", slug.lower()):
+            return slug[:120], role
+        # Ищем "Тема:" внутри текста
+        m_topic = re.search(r"[Тт]ема[:\s]+([^.\n]+)", raw)
+        if m_topic:
+            return m_topic.group(1).strip()[:120], role
+        return "Вебинар", role
+
+    # Обычный заголовок: убираем стандартные шаблонные хвосты
+    clean = re.split(r"[Нн]а этой неделе|[Нн]а прошлой неделе|✅|🔥|⚡", raw)[0]
+    clean = re.sub(r"[✅✔️🔥⚡📌➡️]\s*", "", clean).strip().rstrip(".,;:")
+    clean = re.sub(r"\s{2,}", " ", clean).strip()
+    return (clean[:120] or raw[:120]), role
+
+
 def event_item_html(ev):
-    """Форматирует мероприятие как карточку с датой, заголовком и ссылками."""
+    """Форматирует мероприятие как карточку: дата · тема · роль · ссылки."""
     date_str  = format_date(ev.get("lastmod", ""))
-    title     = (ev.get("title", "") or "").strip()[:220]
     reg_link  = ev.get("reg_link", "")
     rec_link  = ev.get("rec_link", "")
     url       = ev.get("url", "")
     main_link = reg_link or rec_link or url
 
+    # Чистый заголовок и роль
+    clean_title, role = clean_event_title(ev)
+    if not clean_title:
+        clean_title = slug_title(url) or "Мероприятие"
+
     date_badge = (
         f'<span style="font-size:11px;color:#e65100;font-weight:700;'
-        f'background:#fff3e0;padding:2px 7px;border-radius:4px;margin-right:6px">'
+        f'background:#fff3e0;padding:2px 7px;border-radius:4px;margin-right:8px">'
         f'{e(date_str)}</span>'
         if date_str else ""
+    )
+    role_badge = (
+        f'<span style="font-size:10px;color:#fff;background:#7b1fa2;'
+        f'padding:2px 7px;border-radius:3px;margin-right:8px">{e(role)}</span>'
+        if role else ""
     )
     title_html = (
         f'<a href="{e(main_link)}" target="_blank" '
         f'style="color:#1a1a1a;font-weight:600;font-size:13px;text-decoration:none">'
-        f'{e(title)}</a>'
-        if (main_link and title) else
-        f'<span style="font-weight:600;font-size:13px">{e(title)}</span>'
-        if title else ""
+        f'{e(clean_title)}</a>'
+        if main_link else
+        f'<span style="font-weight:600;font-size:13px">{e(clean_title)}</span>'
     )
     extra = ""
     if rec_link and rec_link != main_link:
         extra = (
-            f'<a href="{e(rec_link)}" target="_blank" '
-            f'style="font-size:11px;color:#1565c0;margin-left:8px">▶ Запись</a>'
+            f' <a href="{e(rec_link)}" target="_blank" '
+            f'style="font-size:11px;color:#1565c0;margin-left:6px">▶ Запись</a>'
         )
     reg_btn = ""
     if reg_link and reg_link == main_link:
         reg_btn = (
-            f'<a href="{e(reg_link)}" target="_blank" '
+            f' <a href="{e(reg_link)}" target="_blank" '
             f'style="font-size:11px;color:#fff;background:#1a73e8;padding:2px 8px;'
-            f'border-radius:4px;text-decoration:none;margin-left:8px">Регистрация</a>'
+            f'border-radius:4px;text-decoration:none;margin-left:6px">Регистрация</a>'
         )
 
     return (
         f'<div style="border:1px solid #fce4d6;border-radius:8px;padding:10px 14px;'
         f'margin-bottom:8px;background:#fffaf7">'
-        f'<div>{date_badge}{title_html}{reg_btn}{extra}</div>'
+        f'<div>{date_badge}{role_badge}{title_html}{reg_btn}{extra}</div>'
         f'</div>'
     )
+
+
+def _clean_update_item(text: str) -> str:
+    """Убирает артефакты '| N. text |' из пунктов обновлений."""
+    text = text.strip()
+    # Убираем "|  1. text  |" → "text"
+    text = re.sub(r"^\|\s*\d+\.\s*", "", text)
+    text = re.sub(r"\s*\|$", "", text)
+    # Убираем чисто разделительные строки типа "| --- |"
+    if re.match(r"^[\|\-\s]+$", text):
+        return ""
+    return text.strip()
 
 
 def update_block_html(updates):
     """Рендерит блок обновлений: версия + дата + список фич."""
     if not updates:
-        return '<p class="empty-note">Обновлений за этот месяц не найдено автоматически.</p>'
-    html = ""
+        return ""
+    html_out = ""
     for upd in updates:
         version  = upd.get("version", "")
         date_str = format_date(upd.get("date", ""))
         title    = upd.get("title", "")
         url      = upd.get("url", "")
-        items    = upd.get("items", [])
+        raw_items = upd.get("items", [])
+
+        # Очищаем артефакты и дедуплицируем
+        items = []
+        seen_items = set()
+        for it in raw_items:
+            cleaned = _clean_update_item(it)
+            if cleaned and cleaned.lower() not in seen_items:
+                seen_items.add(cleaned.lower())
+                items.append(cleaned)
 
         # Заголовок обновления
         ver_badge = (
@@ -2476,11 +2537,11 @@ def update_block_html(updates):
         else:
             body = ""
 
-        html += (
+        html_out += (
             f'<div style="border:1px solid #ede7f6;border-radius:8px;padding:10px 14px;margin-bottom:10px;background:#faf8ff">'
             f'<div>{header_inner}</div>{body}</div>'
         )
-    return html
+    return html_out
 
 
 def bar_chart(title, pairs, color="#4f77ff", unit=""):
@@ -2702,12 +2763,20 @@ td.left{text-align:left}
         uy  = item.spywords.get("unique_urls_yandex")
         ug  = item.spywords.get("unique_urls_google")
 
-        # Счётчики активности
+        # Счётчики активности (предварительные; ряд будет уточнён после фильтрации)
         n_content  = len(item.content)
         n_external = len(item.external)
         n_events   = len(item.events)
         n_updates  = len(item.updates)
         n_channels = len(item.social_channels)
+
+        # Фильтр упоминаний — нужен до stat bar
+        relevant_external = [x for x in item.external if is_relevant_mention(x, item.name)]
+        n_external = len(relevant_external)
+
+        # Считаем активные каналы и суммарные посты (до рендера соцсетей)
+        active_channels = [ch for ch in item.social_channels if len(ch.get("posts", [])) > 0]
+        total_social_posts = sum(len(ch.get("posts", [])) for ch in item.social_channels)
 
         stat_color = lambda n, c: f'class="comp-stat-num {c}"' if n else 'class="comp-stat-num"'
 
@@ -2770,8 +2839,7 @@ td.left{text-align:left}
         # Пересчитываем n_content по реальным редакционным публикациям
         n_content = len(editorial)
 
-        # ── Сторонние публикации (фильтр нерелевантных) ──────────────
-        relevant_external = [x for x in item.external if is_relevant_mention(x, item.name)]
+        # ── Сторонние публикации (фильтр уже применён выше) ─────────
         if relevant_external:
             ext_html = '<ul class="items-list">' + "".join(
                 mention_item_html(x) for x in relevant_external
@@ -2801,6 +2869,9 @@ td.left{text-align:left}
             cats     = ch.get("cats", {})
             summary  = ch.get("summary", "")
             total    = len(posts)
+            # Б2: скрываем каналы с 0 постов за месяц
+            if total == 0:
+                continue
             pc = PLATFORM_COLORS.get(platform, "#555")
 
             cats_str = " · ".join(
@@ -2845,15 +2916,14 @@ td.left{text-align:left}
 </div>"""
 
         if not social_html:
-            social_html = '<p class="empty-note">Соцсети не определены или данных нет.</p>'
+            if item.social_channels:
+                social_html = '<p class="empty-note">Постов за этот месяц не найдено ни в одном канале.</p>'
+            else:
+                social_html = '<p class="empty-note">Соцсети не определены или данных нет.</p>'
 
         # ── Мероприятия ──────────────────────────────────────────────
         events_html = "".join(event_item_html(ev) for ev in item.events)
-        events_block = (
-            events_html
-            if events_html
-            else '<p class="empty-note">Анонсов мероприятий не найдено.</p>'
-        )
+        events_block = events_html  # пустую секцию скроем в шаблоне
 
         # ── Обновления ───────────────────────────────────────────────
         upd_block = update_block_html(item.updates)
@@ -2863,6 +2933,49 @@ td.left{text-align:left}
         if item.errors:
             err_li = "".join(f"<div>— {e(x)}</div>" for x in item.errors)
             errors_block = f'<div class="errors-block"><b>Ошибки сбора:</b><br>{err_li}</div>'
+
+        # ── Б1: Краткий вывод ────────────────────────────────────────
+        _summary_parts = []
+        if n_content > 0:
+            _word = "статья" if n_content == 1 else ("статьи" if 2 <= n_content <= 4 else "статей")
+            _summary_parts.append(f"{n_content} {_word}")
+        if total_social_posts > 0:
+            _word = "пост" if total_social_posts == 1 else ("поста" if 2 <= total_social_posts <= 4 else "постов")
+            _summary_parts.append(f"{total_social_posts} {_word} в соцсетях")
+        if n_events > 0:
+            _word = "мероприятие" if n_events == 1 else ("мероприятия" if 2 <= n_events <= 4 else "мероприятий")
+            _summary_parts.append(f"{n_events} {_word}")
+        if n_updates > 0:
+            _word = "обновление" if n_updates == 1 else ("обновления" if 2 <= n_updates <= 4 else "обновлений")
+            _summary_parts.append(f"{n_updates} {_word} продукта")
+
+        if _summary_parts:
+            _brief_text = e(item.name) + ": " + e(", ".join(_summary_parts)) + "."
+            _brief_color = "#1a5c35"
+            _brief_bg = "#f0fdf4"
+            _brief_border = "#bbf7d0"
+        else:
+            _brief_text = e(item.name) + ": активности за этот месяц не обнаружено."
+            _brief_color = "#6b7280"
+            _brief_bg = "#f9fafb"
+            _brief_border = "#e5e7eb"
+
+        brief_summary_html = (
+            f'<div style="margin:14px 0 4px;padding:10px 16px;border-radius:8px;'
+            f'background:{_brief_bg};border:1px solid {_brief_border};'
+            f'font-size:13px;color:{_brief_color};font-weight:500;line-height:1.5">'
+            f'{_brief_text}</div>'
+        )
+
+        # ── Б5: Условный рендер секций (не показываем пустые) ────────
+        events_section = (
+            f'<div class="section"><p class="section-title">🎙 Мероприятия</p>{events_block}</div>'
+            if events_block else ""
+        )
+        upd_section = (
+            f'<div class="section"><p class="section-title">🔄 Обновления в продукте</p>{upd_block}</div>'
+            if upd_block else ""
+        )
 
         body += f"""
 <div class="comp-card" id="{e(item.key)}">
@@ -2879,12 +2992,8 @@ td.left{text-align:left}
       <div class="comp-stat-label">статей</div>
     </div>
     <div class="comp-stat">
-      <div {stat_color(n_external, 'purple')}>{n_external}</div>
-      <div class="comp-stat-label">упоминаний</div>
-    </div>
-    <div class="comp-stat">
-      <div {stat_color(n_channels, 'orange')}>{n_channels}</div>
-      <div class="comp-stat-label">соцсетей</div>
+      <div {stat_color(total_social_posts, 'orange')}>{total_social_posts}</div>
+      <div class="comp-stat-label">постов</div>
     </div>
     <div class="comp-stat">
       <div {stat_color(n_events, 'green')}>{n_events}</div>
@@ -2894,29 +3003,28 @@ td.left{text-align:left}
       <div {stat_color(n_updates, 'purple')}>{n_updates}</div>
       <div class="comp-stat-label">обновлений</div>
     </div>
+    <div class="comp-stat">
+      <div {stat_color(n_external, 'purple')}>{n_external}</div>
+      <div class="comp-stat-label">упоминаний</div>
+    </div>
   </div>
   <div class="comp-body">
+    {brief_summary_html}
     {spywords_html}
     {ws_html}
     <div class="section">
-      <p class="section-title">Контент на сайте</p>
+      <p class="section-title">📝 Контент на сайте</p>
       {cnt_html}
     </div>
     <div class="section">
-      <p class="section-title">Сторонние публикации</p>
-      {ext_html}
-    </div>
-    <div class="section">
-      <p class="section-title">Соц. сети</p>
+      <p class="section-title">📣 Соц. сети</p>
       {social_html}
     </div>
+    {events_section}
+    {upd_section}
     <div class="section">
-      <p class="section-title">Мероприятия</p>
-      {events_block}
-    </div>
-    <div class="section">
-      <p class="section-title">Обновления в сервисе</p>
-      {upd_block}
+      <p class="section-title">📰 Упоминания в СМИ</p>
+      {ext_html}
     </div>
     {errors_block}
   </div>
