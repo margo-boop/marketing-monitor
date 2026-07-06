@@ -2725,6 +2725,12 @@ td.left{text-align:left}
 /* Итоговая секция */
 .summary-section{background:#fff;border:1px solid #e2e5ee;border-radius:12px;padding:20px 24px;margin-bottom:28px}
 .summary-title{font-size:17px;font-weight:600;color:#1a1a1a;margin:0 0 16px;border-bottom:2px solid #f0f1f7;padding-bottom:12px}
+/* Executive Summary */
+.exec-summary{background:#fff;border:1px solid #c7d7f5;border-radius:12px;padding:20px 24px;margin-bottom:24px;border-left:4px solid #4f77ff}
+.exec-title{font-size:16px;font-weight:700;color:#1a1a1a;margin:0 0 14px;letter-spacing:.2px}
+.exec-row{display:flex;align-items:flex-start;gap:10px;padding:6px 0;border-bottom:1px solid #f0f3fb;font-size:13px;line-height:1.5;color:#333}
+.exec-row:last-child{border-bottom:none}
+.exec-icon{font-size:16px;flex-shrink:0;min-width:22px;line-height:1.4}
 @media print{.page{padding:0}@page{margin:12mm 16mm}.charts{grid-template-columns:1fr 1fr}.comp-card{break-inside:avoid}}
 @media(max-width:760px){.charts{grid-template-columns:1fr}.report-header{flex-direction:column}.toc{width:auto}}
 """
@@ -2741,12 +2747,14 @@ td.left{text-align:left}
   </div>
   <div class="toc">
     <p class="toc-label">Содержание</p>
+    <a href="#exec-summary" style="display:block;color:#4f77ff;text-decoration:none;font-size:13px;padding:4px 0;border-bottom:1px solid #f0f0f0;font-weight:600">Ключевые события</a>
     <a href="#analytics" style="display:block;color:#4f77ff;text-decoration:none;font-size:13px;padding:4px 0;border-bottom:1px solid #f0f0f0">Аналитика</a>
     {toc_items}
-    <a href="#summary" style="display:block;color:#4f77ff;text-decoration:none;font-size:13px;padding:4px 0">Вывод</a>
+    <a href="#summary" style="display:block;color:#4f77ff;text-decoration:none;font-size:13px;padding:4px 0">Сводная таблица</a>
   </div>
 </div>
 """
+    body += render_executive_summary_html(items, month_label)
     body += render_analytics_html(items)
     body += render_summary_html(items)
 
@@ -3034,57 +3042,169 @@ td.left{text-align:left}
     return body
 
 
-def render_summary_html(items):
-    # Таблица маркетинговой активности
-    rows = []
-    for item in items:
-        site_cnt = len(item.content)
-        ext_cnt = len(item.external)
-        soc = len([s for s in item.social if s.strip()])
-        rows.append((item.name, site_cnt, ext_cnt, soc))
+def _item_activity_stats(item):
+    """Вычисляет статистику активности конкурента. Используется в summary и executive summary."""
+    _EDITORIAL_LABELS = {"Статья", "Кейс", "Новость", "Мероприятие", "Обновление", "Партнёрство"}
+    editorial = [x for x in item.content if classify_page(x.get("url", ""))[0] in _EDITORIAL_LABELS]
+    n_blog    = len(editorial)
+    n_posts   = sum(len(ch.get("posts", [])) for ch in item.social_channels)
+    n_events  = len(item.events)
+    n_updates = len(item.updates)
+    relevant_ext = [x for x in item.external if is_relevant_mention(x, item.name)]
+    n_ext     = len(relevant_ext)
+    total     = n_blog + n_posts + n_events + n_updates
+    return {
+        "blog": n_blog, "posts": n_posts, "events": n_events,
+        "updates": n_updates, "ext": n_ext, "total": total,
+        "editorial": editorial,
+    }
 
-    # Видимость TOP-50
-    visibility = []
-    for item in items:
-        total = (item.spywords.get("yandex_top50") or 0) + (item.spywords.get("google_top50") or 0)
-        if total:
-            visibility.append((item.name, total))
-    visibility.sort(key=lambda x: x[1], reverse=True)
 
-    # Бренд трафик (вордстат)
-    wordstat_all = []
-    for item in items:
-        for key, value in item.wordstat.items():
-            wordstat_all.append((key, value, item.name))
-    wordstat_all.sort(key=lambda x: x[1], reverse=True)
+def render_executive_summary_html(items, month_label):
+    """Блок «Ключевые события месяца» — вставляется перед карточками конкурентов."""
+    stats = [{"item": it, **_item_activity_stats(it)} for it in items]
+    by_total = sorted(stats, key=lambda x: x["total"], reverse=True)
 
-    act_rows_html = "".join(
-        f"<tr><td>{e(name)}</td><td>{sc}</td><td>{ec}</td><td>{soc}</td><td>—</td><td>—</td><td>—</td></tr>"
-        for name, sc, ec, soc in rows
+    def _num(n, singular, few, many):
+        if n % 10 == 1 and n % 100 != 11:       return f"{n} {singular}"
+        if 2 <= n % 10 <= 4 and not (12 <= n % 100 <= 14): return f"{n} {few}"
+        return f"{n} {many}"
+
+    # ── Самый активный ───────────────────────────────────────────
+    top1 = by_total[0] if by_total and by_total[0]["total"] > 0 else None
+    top2 = by_total[1] if len(by_total) > 1 and by_total[1]["total"] > 0 else None
+    if top1:
+        top_parts = []
+        if top1["blog"]:    top_parts.append(_num(top1["blog"],    "статья",      "статьи",      "статей"))
+        if top1["posts"]:   top_parts.append(_num(top1["posts"],   "TG-пост",     "TG-поста",    "TG-постов"))
+        if top1["events"]:  top_parts.append(_num(top1["events"],  "мероприятие", "мероприятия", "мероприятий"))
+        if top1["updates"]: top_parts.append(_num(top1["updates"], "обновление",  "обновления",  "обновлений"))
+        top_text = f'<b>{e(top1["item"].name)}</b> — {e(", ".join(top_parts))}'
+        if top2:
+            top_parts2 = []
+            if top2["blog"]:    top_parts2.append(_num(top2["blog"],    "статья",      "статьи",      "статей"))
+            if top2["posts"]:   top_parts2.append(_num(top2["posts"],   "TG-пост",     "TG-поста",    "TG-постов"))
+            if top2["events"]:  top_parts2.append(_num(top2["events"],  "мероприятие", "мероприятия", "мероприятий"))
+            if top2["updates"]: top_parts2.append(_num(top2["updates"], "обновление",  "обновления",  "обновлений"))
+            top_text += f'; <b>{e(top2["item"].name)}</b> — {e(", ".join(top_parts2))}'
+        leader_html = f'<div class="exec-row"><span class="exec-icon">🏆</span><span><b>Самый активный:</b> {top_text}</span></div>'
+    else:
+        leader_html = '<div class="exec-row"><span class="exec-icon">🏆</span><span>Ни один конкурент не проявил активности за этот месяц.</span></div>'
+
+    # ── Новые обновления продукта ────────────────────────────────
+    updates_parts = []
+    for s in stats:
+        if s["updates"]:
+            for upd in s["item"].updates[:2]:
+                ver   = upd.get("version", "")
+                title = upd.get("title", "")
+                label = ver or title or "обновление"
+                items_sample = [_clean_update_item(it) for it in upd.get("items", [])[:2]]
+                items_sample = [x for x in items_sample if x]
+                detail = " · ".join(items_sample[:2]) if items_sample else ""
+                updates_parts.append(
+                    f'<b>{e(s["item"].name)}</b> {e(label)}'
+                    + (f' — {e(detail)}' if detail else '')
+                )
+    if updates_parts:
+        product_html = (
+            '<div class="exec-row"><span class="exec-icon">🆕</span>'
+            '<span><b>Новое в продуктах:</b> '
+            + ' &nbsp;|&nbsp; '.join(updates_parts)
+            + '</span></div>'
+        )
+    else:
+        product_html = ""
+
+    # ── Блог ─────────────────────────────────────────────────────
+    blog_parts = [(s["item"].name, s["blog"]) for s in by_total if s["blog"] > 0]
+    if blog_parts:
+        blog_text = " · ".join(
+            f'<b>{e(nm)}</b> {_num(n, "статья", "статьи", "статей")}'
+            for nm, n in blog_parts
+        )
+        blog_html = f'<div class="exec-row"><span class="exec-icon">📝</span><span><b>Блог:</b> {blog_text}</span></div>'
+    else:
+        blog_html = ""
+
+    # ── Telegram ─────────────────────────────────────────────────
+    tg_parts = [(s["item"].name, s["posts"]) for s in by_total if s["posts"] > 0]
+    if tg_parts:
+        tg_text = " · ".join(
+            f'<b>{e(nm)}</b> {_num(n, "пост", "поста", "постов")}'
+            for nm, n in tg_parts
+        )
+        tg_html = f'<div class="exec-row"><span class="exec-icon">📣</span><span><b>Telegram:</b> {tg_text}</span></div>'
+    else:
+        tg_html = ""
+
+    # ── Вебинары / мероприятия ───────────────────────────────────
+    ev_parts = [(s["item"].name, s["events"]) for s in stats if s["events"] > 0]
+    if ev_parts:
+        ev_text = " · ".join(
+            f'<b>{e(nm)}</b> {_num(n, "мероприятие", "мероприятия", "мероприятий")}'
+            for nm, n in ev_parts
+        )
+        ev_html = f'<div class="exec-row"><span class="exec-icon">🎙</span><span><b>Мероприятия:</b> {ev_text}</span></div>'
+    else:
+        ev_html = ""
+
+    # ── Неактивные ───────────────────────────────────────────────
+    inactive = [s["item"].name for s in stats if s["total"] == 0]
+    inactive_html = (
+        f'<div class="exec-row"><span class="exec-icon">😴</span>'
+        f'<span><b>Неактивны:</b> {e(", ".join(inactive))}</span></div>'
+        if inactive else ""
     )
-    vis_html = "".join(f"<tr><td>{i+1}</td><td>{e(k)}</td><td>{fmt(v)}</td></tr>" for i, (k, v) in enumerate(visibility)) or "<tr><td colspan='3'>SpyWords не загружен</td></tr>"
-    ws_html = "".join(f"<tr><td>{i+1}</td><td>{e(k)}</td><td>{fmt(v)}</td><td>{e(nm)}</td></tr>" for i, (k, v, nm) in enumerate(wordstat_all)) or "<tr><td colspan='4'>Вордстат не загружен</td></tr>"
+
+    rows_html = leader_html + product_html + tg_html + blog_html + ev_html + inactive_html
+
+    return f"""
+<div class="exec-summary" id="exec-summary">
+  <p class="exec-title">{e(month_label)} — ключевые события</p>
+  {rows_html}
+</div>
+"""
+
+
+def render_summary_html(items):
+    """Итоговая сводная таблица активности всех конкурентов."""
+    stats = [{"item": it, **_item_activity_stats(it)} for it in items]
+    by_total = sorted(stats, key=lambda x: x["total"], reverse=True)
+
+    def _cell(n):
+        if n == 0:
+            return '<td style="color:#ddd;text-align:center">—</td>'
+        return f'<td style="text-align:center;font-weight:600">{n}</td>'
+
+    rows_html = ""
+    for s in by_total:
+        total = s["total"]
+        total_cell = (
+            f'<td style="text-align:center;font-weight:700;color:#1a5c35">{total}</td>'
+            if total > 0 else
+            '<td style="text-align:center;color:#aaa">0</td>'
+        )
+        rows_html += (
+            f'<tr><td style="font-weight:500">{e(s["item"].name)}</td>'
+            f'{_cell(s["blog"])}{_cell(s["posts"])}{_cell(s["events"])}'
+            f'{_cell(s["updates"])}{_cell(s["ext"])}{total_cell}</tr>'
+        )
 
     return f"""
 <div class="summary-section" id="summary">
-  <p class="summary-title">Вывод: маркетинговая активность конкурентов</p>
-  <table style="margin-bottom:20px">
+  <p class="summary-title">Сводная таблица активности</p>
+  <table>
     <thead><tr>
       <th style="text-align:left">Компания</th>
-      <th>Статьи</th><th>Упоминания</th><th>Соцсети</th>
-      <th>Мероприятия</th><th>Обновления</th>
+      <th>📝 Статьи</th>
+      <th>📣 TG-посты</th>
+      <th>🎙 Вебинары</th>
+      <th>🔄 Обновления</th>
+      <th>📰 Упоминания</th>
+      <th style="color:#1a5c35">Итого</th>
     </tr></thead>
-    <tbody>{act_rows_html}</tbody>
-  </table>
-  <p style="font-size:13px;font-weight:600;color:#555;margin:16px 0 8px">Бренд-трафик (Вордстат):</p>
-  <table style="margin-bottom:20px">
-    <thead><tr><th>#</th><th style="text-align:left">Запрос</th><th>Показов/мес</th><th>Компания</th></tr></thead>
-    <tbody>{ws_html}</tbody>
-  </table>
-  <p style="font-size:13px;font-weight:600;color:#555;margin:16px 0 8px">Видимость в поиске TOP-50 (Яндекс + Google):</p>
-  <table>
-    <thead><tr><th>#</th><th style="text-align:left">Компания</th><th>Запросов в TOP-50</th></tr></thead>
-    <tbody>{vis_html}</tbody>
+    <tbody>{rows_html}</tbody>
   </table>
 </div>
 """
