@@ -3497,10 +3497,7 @@ def generate_ai_interpretation(items, month_label):
     api_key = os.environ.get("GEMINI_API_KEY", "")
     if not api_key:
         return ""
-    try:
-        import google.generativeai as genai
-    except ImportError:
-        return ""
+    # Используем urllib (уже импортирован) — никаких доп. пакетов
 
     # Строим компактный дайджест по каждому конкуренту
     lines = []
@@ -3554,10 +3551,23 @@ def generate_ai_interpretation(items, month_label):
     )
 
     try:
-        genai.configure(api_key=api_key)
-        model = genai.GenerativeModel("gemini-1.5-flash")
-        resp = model.generate_content(prompt)
-        return resp.text.strip()
+        import json as _json
+        url = (
+            "https://generativelanguage.googleapis.com/v1beta/models/"
+            f"gemini-1.5-flash:generateContent?key={api_key}"
+        )
+        body = _json.dumps({
+            "contents": [{"parts": [{"text": prompt}]}],
+            "generationConfig": {"maxOutputTokens": 450, "temperature": 0.4},
+        }).encode()
+        req = urllib.request.Request(
+            url, data=body,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            data = _json.loads(resp.read())
+        return data["candidates"][0]["content"]["parts"][0]["text"].strip()
     except Exception as exc:
         log_error("[ai_interpretation]", exc)
         return ""

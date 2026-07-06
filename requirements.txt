@@ -7,4 +7,4 @@
 reportlab>=4.0
 flask>=3.0
 waitress>=3.0
-google-generativeai>=0.8
+# google-generativeai не нужен — Gemini вызывается через urllib напрямую
