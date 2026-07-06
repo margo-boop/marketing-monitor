@@ -490,6 +490,29 @@ def extract_analytical_description(page_html, comp_name):
     return ""
 
 
+_TRANSLIT_MAP = {
+    "shh":"щ","sh":"ш","ch":"ч","zh":"ж","ts":"ц","ya":"я","yu":"ю","yo":"ё",
+    "ye":"е","yi":"ый","je":"е","jo":"ё","ju":"ю","ja":"я",
+    "sch":"щ","kh":"х","gh":"г",
+    "a":"а","b":"б","v":"в","g":"г","d":"д","e":"е","z":"з","i":"и",
+    "j":"й","k":"к","l":"л","m":"м","n":"н","o":"о","p":"п","r":"р",
+    "s":"с","t":"т","u":"у","f":"ф","h":"х","c":"к","x":"кс","y":"ы","q":"к",
+    "jelektronnyj":"электронный","jelektronnyh":"электронных",
+    "jeffektivnyj":"эффективный",
+}
+
+def _translit_word(word: str) -> str:
+    """Пробует перевести транслитерированное слово обратно в кириллицу."""
+    # Если уже содержит кириллицу — оставляем
+    if re.search(r"[а-яёА-ЯЁ]", word):
+        return word
+    # Если слово полностью латинское — применяем транслит по длинным паттернам сначала
+    result = word.lower()
+    for lat, cyr in sorted(_TRANSLIT_MAP.items(), key=lambda x: -len(x[0])):
+        result = result.replace(lat, cyr)
+    return result
+
+
 def slug_title(href):
     path = urllib.parse.urlparse(href).path.rstrip("/")
     seg = path.split("/")[-1] if path else ""
@@ -497,7 +520,11 @@ def slug_title(href):
     seg = re.sub(r"[-_]+", " ", seg).strip()
     if not seg:
         return ""
-    return seg[:1].upper() + seg[1:]
+    # Если слово полностью латинское без пробелов — пробуем транслит
+    words = seg.split()
+    decoded = " ".join(_translit_word(w) for w in words)
+    result = decoded.strip()
+    return result[:1].upper() + result[1:] if result else ""
 
 
 def parse_links(markup, base):
@@ -1343,11 +1370,27 @@ def collect_site(comp, month=None):
     return result
 
 
+def _strip_tracking_params(url: str) -> str:
+    """Убирает UTM и другие трекинговые параметры из URL для дедупликации."""
+    try:
+        parsed = urllib.parse.urlparse(url)
+        _TRACKING = {"utm_source","utm_medium","utm_campaign","utm_term","utm_content",
+                     "yclid","gclid","fbclid","ref","from","source","medium"}
+        qs = urllib.parse.parse_qs(parsed.query, keep_blank_values=True)
+        clean_qs = {k: v for k, v in qs.items() if k.lower() not in _TRACKING}
+        clean_query = urllib.parse.urlencode(clean_qs, doseq=True)
+        return urllib.parse.urlunparse(parsed._replace(query=clean_query))
+    except Exception:
+        return url
+
+
 def unique_items(items, key):
     seen = set()
     out = []
     for item in items:
-        value = item.get(key) if isinstance(item, dict) else item
+        raw_value = item.get(key) if isinstance(item, dict) else item
+        # Для URL-ключей дедуплицируем без трекинговых параметров
+        value = _strip_tracking_params(raw_value) if key == "url" and raw_value else raw_value
         if value in seen:
             continue
         seen.add(value)
@@ -2308,12 +2351,34 @@ def content_item_html(x):
     return f'<li>{badge}<a href="{e(url)}" target="_blank">{e(title)}</a>{date_tag}</li>'
 
 
+def clean_snippet(raw: str) -> str:
+    """Убирает HTML-теги и экранированные символы из сниппета."""
+    import html as _html
+    text = _html.unescape(raw or "")
+    text = re.sub(r"<[^>]+>", " ", text)          # strip HTML tags
+    text = re.sub(r"&[a-z]+;", " ", text)          # strip remaining entities
+    text = re.sub(r"\s{2,}", " ", text).strip()
+    return text
+
+
+def is_relevant_mention(item: dict, comp_name: str) -> bool:
+    """Проверяет что упоминание реально про конкурента."""
+    name_lower = comp_name.lower()
+    # Берём ключевые слова из имени (убираем короткие)
+    name_words = [w for w in re.split(r"\s+|-", name_lower) if len(w) >= 3]
+    title_lower   = (item.get("title", "") or "").lower()
+    snippet_lower = (item.get("snippet", "") or "").lower()
+    domain_lower  = (item.get("url", "") or "").lower()
+    combined = title_lower + " " + snippet_lower + " " + domain_lower
+    return any(w in combined for w in name_words)
+
+
 def mention_item_html(x):
     """Форматирует внешнее упоминание: категория + источник + заголовок + дата + сниппет."""
     url = x.get("url", "")
     title = x.get("title", "") or slug_title(url) or url
     date_str = format_date(x.get("lastmod", ""))
-    snippet = x.get("snippet", "")
+    snippet = clean_snippet(x.get("snippet", ""))
     label, color = classify_mention(url, snippet)
     dom = reg_domain(url) or url
     badge = f'<span style="font-size:10px;padding:1px 6px;border-radius:3px;background:{color};color:#fff;margin-right:5px">{e(label)}</span>'
@@ -2646,32 +2711,73 @@ td.left{text-align:left}
 
         stat_color = lambda n, c: f'class="comp-stat-num {c}"' if n else 'class="comp-stat-num"'
 
-        # ── Вордстат ─────────────────────────────────────────────────
+        # ── Показатели сайта (только если есть данные SpyWords) ──────
+        has_spywords = any(v is not None for v in [y50, y10, g50, g10, sy, sg, uy, ug])
+        if has_spywords:
+            spywords_html = f"""<div class="section">
+      <p class="section-title">Показатели сайта</p>
+      <table>
+        <thead><tr><th style="text-align:left">Поисковая система</th><th>TOP-50</th><th>TOP-10</th><th>Трафик</th><th>Уник. URL</th></tr></thead>
+        <tbody>
+          <tr><td class="left"><span class="ya">Яндекс</span></td><td>{fmt(y50)}</td><td>{fmt(y10)}</td><td>{fmt(sy)}</td><td>{fmt(uy)}</td></tr>
+          <tr><td class="left"><span class="gl">Google</span></td><td>{fmt(g50)}</td><td>{fmt(g10)}</td><td>{fmt(sg)}</td><td>{fmt(ug)}</td></tr>
+        </tbody>
+      </table>
+    </div>"""
+        else:
+            spywords_html = ""  # скрываем пустую таблицу
+
+        # ── Вордстат (показываем только если есть данные) ────────────
         if item.wordstat:
-            ws_html = '<div class="items-list">' + "".join(
-                f'<div class="ws-row"><span class="ws-query">«{e(k)}»</span>'
-                f'<span class="ws-val">{fmt(v)} показов/мес</span></div>'
-                for k, v in item.wordstat.items()
-            ) + "</div>"
+            ws_html = (
+                '<div class="section"><p class="section-title">Вордстат — брендовые запросы</p>'
+                '<div class="items-list">'
+                + "".join(
+                    f'<div class="ws-row"><span class="ws-query">«{e(k)}»</span>'
+                    f'<span class="ws-val">{fmt(v)} показов/мес</span></div>'
+                    for k, v in item.wordstat.items()
+                )
+                + "</div></div>"
+            )
         else:
-            ws_html = '<p class="empty-note">Вордстат не загружен.</p>'
+            ws_html = ""  # скрываем пустой вордстат
 
-        # ── Контент на сайте ─────────────────────────────────────────
-        if item.content:
-            cnt_intro = f'<p style="font-size:12px;color:#555;margin:0 0 8px">За {e(month_label.lower())} опубликовано <b>{n_content}</b> материала(-ов)</p>'
-            cnt_html = cnt_intro + '<ul class="items-list">' + "".join(
-                content_item_html(x) for x in item.content
-            ) + "</ul>"
+        # ── Контент на сайте (блог отдельно от страниц) ──────────────
+        _EDITORIAL_LABELS = {"Статья", "Кейс", "Новость", "Мероприятие", "Обновление", "Партнёрство"}
+        editorial = [x for x in item.content if classify_page(x.get("url",""))[0] in _EDITORIAL_LABELS]
+        pages_only = [x for x in item.content if classify_page(x.get("url",""))[0] not in _EDITORIAL_LABELS]
+
+        if editorial or pages_only:
+            parts = []
+            if editorial:
+                parts.append(
+                    f'<p style="font-size:12px;color:#555;margin:0 0 8px">'
+                    f'Публикации за {e(month_label.lower())}: <b>{len(editorial)}</b></p>'
+                    + '<ul class="items-list">'
+                    + "".join(content_item_html(x) for x in editorial[:8])
+                    + "</ul>"
+                )
+            if pages_only:
+                extra_count = len(pages_only)
+                parts.append(
+                    f'<p style="font-size:12px;color:#aaa;margin:6px 0 0">'
+                    f'+ ещё {extra_count} стр. сайта обновлено</p>'
+                )
+            cnt_html = "".join(parts)
         else:
-            cnt_html = '<p class="empty-note">Публикаций за этот месяц не найдено автоматически.</p>'
+            cnt_html = '<p class="empty-note">Публикаций за этот месяц не найдено.</p>'
 
-        # ── Сторонние публикации ──────────────────────────────────────
-        if item.external:
+        # Пересчитываем n_content по реальным редакционным публикациям
+        n_content = len(editorial)
+
+        # ── Сторонние публикации (фильтр нерелевантных) ──────────────
+        relevant_external = [x for x in item.external if is_relevant_mention(x, item.name)]
+        if relevant_external:
             ext_html = '<ul class="items-list">' + "".join(
-                mention_item_html(x) for x in item.external
+                mention_item_html(x) for x in relevant_external
             ) + "</ul>"
         else:
-            ext_html = '<p class="empty-note">Сторонних упоминаний за этот месяц не найдено автоматически.</p>'
+            ext_html = '<p class="empty-note">Упоминаний в СМИ за этот месяц не найдено.</p>'
 
         # ── Соцсети ──────────────────────────────────────────────────
         CAT_COLORS = {
@@ -2790,20 +2896,8 @@ td.left{text-align:left}
     </div>
   </div>
   <div class="comp-body">
-    <div class="section">
-      <p class="section-title">Показатели сайта</p>
-      <table>
-        <thead><tr><th style="text-align:left">Поисковая система</th><th>TOP-50</th><th>TOP-10</th><th>Трафик</th><th>Уник. URL</th></tr></thead>
-        <tbody>
-          <tr><td class="left"><span class="ya">Яндекс</span></td><td>{fmt(y50)}</td><td>{fmt(y10)}</td><td>{fmt(sy)}</td><td>{fmt(uy)}</td></tr>
-          <tr><td class="left"><span class="gl">Google</span></td><td>{fmt(g50)}</td><td>{fmt(g10)}</td><td>{fmt(sg)}</td><td>{fmt(ug)}</td></tr>
-        </tbody>
-      </table>
-    </div>
-    <div class="section">
-      <p class="section-title">Вордстат — брендовые запросы</p>
-      {ws_html}
-    </div>
+    {spywords_html}
+    {ws_html}
     <div class="section">
       <p class="section-title">Контент на сайте</p>
       {cnt_html}
@@ -2823,10 +2917,6 @@ td.left{text-align:left}
     <div class="section">
       <p class="section-title">Обновления в сервисе</p>
       {upd_block}
-    </div>
-    <div class="section">
-      <p class="section-title">Вакансии</p>
-      <p class="empty-note">Не загружено автоматически.</p>
     </div>
     {errors_block}
   </div>
