@@ -684,17 +684,25 @@
     const _startTime = Date.now();
 
     try {
-      fetch("/api/run", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          month: selectedMonth,
-          sources: getSources(),
-          importText: "",
-          manualMetrics: {},
-          auth: {}
-        })
-      }).catch(() => {});
+      // Render free tier засыпает — повторяем POST пока сервер не проснётся
+      const _body = JSON.stringify({
+        month: selectedMonth, sources: getSources(),
+        importText: "", manualMetrics: {}, auth: {}
+      });
+      let _started = false;
+      for (let _attempt = 0; _attempt < 25 && !_started; _attempt++) {
+        try {
+          const _r = await fetch("/api/run", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: _body
+          });
+          if (_r.ok) { _started = true; break; }
+        } catch (_) {}
+        $("progressText").textContent = "Сервер запускается...";
+        await new Promise(_r => setTimeout(_r, 4000));
+      }
+      if (!_started) throw new Error("Сервер недоступен — попробуйте ещё раз");
 
       const job = await pollJob($("progressText"), _startTime);
       showResult(job);
