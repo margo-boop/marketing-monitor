@@ -1312,12 +1312,19 @@ def collect_site(comp, month=None):
                                 "pubDate": d_m.group(1).strip() if d_m else "",
                             })
 
+                _comp_domain = comp.get("domain", "")
                 _feed_unknown = []
                 for fi in feed_items:
-                    # Предпочитаем ссылку на оригинальный сайт (поле origLink / sourceUrl / originalUrl)
-                    url = (fi.get("origLink") or fi.get("sourceUrl") or fi.get("originalUrl") or
-                           fi.get("link") or fi.get("url") or "")
+                    # Предпочитаем оригинальную ссылку на сайт конкурента
+                    # (Dzen кросс-постинг: origLink / sourceUrl / originalUrl → mera-soft.ru/tpost/...)
+                    url = (fi.get("origLink") or fi.get("sourceUrl") or fi.get("originalUrl") or "")
+                    if not url:
+                        # Если нет поля с оригинальным URL — fallback на link/url
+                        url = fi.get("link") or fi.get("url") or ""
                     if not url or not url.startswith("http"):
+                        continue
+                    # Берём только статьи с домена самого конкурента — не Dzen, не сторонние
+                    if _comp_domain and _comp_domain not in url:
                         continue
                     title = (fi.get("title") or fi.get("name") or slug_title(url) or "")
                     if isinstance(title, str):
@@ -2109,6 +2116,105 @@ def collect_updates(comp, sitemap_data, tg_posts, month=None):
     return updates[:5]  # максимум 5 обновлений за месяц
 
 
+def collect_dzen(slug, month=None):
+    """
+    Собирает данные с Дзен-канала через официальный API.
+    Возвращает {'subscribers', 'posts': [...], 'errors': [...]}.
+    """
+    result = {"subscribers": "", "posts": [], "errors": []}
+    mm = MONTH_NUM.get(month, "") if month else ""
+    try:
+        api_url = f"https://dzen.ru/api/v3/launcher/export?channelName={slug}&type=rss"
+        raw = request_text(api_url, timeout=15)
+        if not raw:
+            result["errors"].append("Dzen API вернул пустой ответ")
+            return result
+
+        items = []
+        subscribers = ""
+
+        # Попытка 1: JSON
+        try:
+            data = json.loads(raw)
+            # Подписчики
+            subs_val = (data.get("subscribers") or
+                        (data.get("channel") or {}).get("subscribers") or
+                        (data.get("channel") or {}).get("followersCount") or "")
+            if subs_val:
+                subscribers = str(subs_val)
+            # Список статей
+            for key in ("items", "publications", "articles", "entries", "posts"):
+                if isinstance(data.get(key), list):
+                    items = data[key]
+                    break
+            if not items and isinstance(data, list):
+                items = data
+        except (ValueError, TypeError):
+            pass
+
+        # Попытка 2: XML/RSS (Dzen может вернуть RSS-обёрнутый JSON или XML)
+        if not items:
+            # Подписчики из RSS-расширения
+            sm = re.search(r"<(?:dz:)?followers[^>]*>(\d+)</", raw, re.I)
+            if sm:
+                subscribers = sm.group(1)
+            for block in re.findall(r"<item>(.*?)</item>", raw, re.S | re.I):
+                t_m = re.search(r"<title>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?</title>", block, re.S)
+                l_m = re.search(r"<link>(.*?)</link>", block, re.S)
+                d_m = re.search(r"<pubDate>(.*?)</pubDate>", block, re.S)
+                v_m = re.search(r"<(?:dz:)?views[^>]*>(\d+)</", block, re.I)
+                if t_m and l_m:
+                    items.append({
+                        "title":   clean_text(t_m.group(1)),
+                        "link":    clean_text(l_m.group(1)),
+                        "pubDate": d_m.group(1).strip() if d_m else "",
+                        "views":   int(v_m.group(1)) if v_m else 0,
+                    })
+
+        # Фильтруем и формируем посты
+        total_views = 0
+        view_count = 0
+        for fi in items:
+            url   = fi.get("link") or fi.get("url") or ""
+            title = (fi.get("title") or fi.get("name") or "")[:200]
+            raw_date = (fi.get("pubDate") or fi.get("publishedDate") or
+                        fi.get("isoDate") or fi.get("date") or "")
+            lastmod = parse_rss_date(raw_date) if raw_date else ""
+            views = 0
+            try:
+                views = int(fi.get("views") or fi.get("viewsCount") or 0)
+            except (TypeError, ValueError):
+                pass
+
+            if mm and lastmod:
+                parts = lastmod.split("-")
+                if len(parts) < 2 or parts[1] != mm:
+                    continue
+            elif mm and not lastmod:
+                continue  # без даты пропускаем
+
+            if views:
+                total_views += views
+                view_count += 1
+            result["posts"].append({
+                "title": title,
+                "url": url,
+                "lastmod": lastmod,
+                "views": views,
+                "category": "Статья",
+            })
+
+        result["subscribers"] = subscribers
+        # Средние просмотры — сохраняем в поле avg_views для отображения
+        if view_count:
+            result["avg_views"] = total_views // view_count
+        result["posts"] = result["posts"][:30]
+
+    except Exception as exc:
+        result["errors"].append(f"Dzen не собрался: {exc}")
+    return result
+
+
 def collect_social_channels(comp, month=None):
     """
     Собирает данные по всем соцсетям конкурента.
@@ -2216,6 +2322,26 @@ def collect_social_channels(comp, month=None):
             })
         except Exception as exc:
             pass  # YouTube необязателен, молча пропускаем
+
+    # ── Дзен ──────────────────────────────────────────────────────────────
+    dz = socials.get("dzen", "")
+    if dz:
+        dz_data = collect_dzen(dz, month=month)
+        posts = dz_data.get("posts", [])
+        avg_views = dz_data.get("avg_views", 0)
+        cats = {"Статья": len(posts)}
+        subs_str = dz_data.get("subscribers") or "—"
+        summary_extra = f", ср. {avg_views} просм." if avg_views else ""
+        channels.append({
+            "platform": "Дзен",
+            "handle": dz,
+            "url": f"https://dzen.ru/{dz}",
+            "subscribers": subs_str,
+            "posts": posts[:20],
+            "cats": cats,
+            "summary": generate_social_summary("Дзен", dz, cats, len(posts), month_label) + summary_extra,
+            "errors": dz_data.get("errors", []),
+        })
 
     # ── RuTube ────────────────────────────────────────────────────────────
     rt = socials.get("rutube", "")
