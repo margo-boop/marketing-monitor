@@ -327,10 +327,19 @@
 
     iframe {
       width: 100%;
-      min-height: 600px;
+      min-height: 1000px;
       border: 1px solid var(--border);
       border-radius: 12px;
       background: #fff;
+    }
+
+    /* Блок результата вырывается за 580px-ограничение main */
+    .result.show {
+      width: min(96vw, 1200px);
+      position: relative;
+      left: 50%;
+      transform: translateX(-50%);
+      margin-top: 32px;
     }
 
     /* ─── SETTINGS DRAWER ─── */
