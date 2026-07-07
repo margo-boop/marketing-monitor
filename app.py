@@ -254,6 +254,32 @@ MONTH_NUM = {
 }
 
 
+def _report_year_for_mm(mm: str) -> str:
+    """Ожидаемый год для месяца mm в текущем отчётном цикле.
+    Если mm > текущего месяца — это прошлый год, иначе текущий."""
+    import datetime as _dt
+    today = _dt.date.today()
+    year = today.year
+    if mm and int(mm) > today.month:
+        year -= 1
+    return str(year)
+
+
+def _date_matches(lastmod: str, mm: str) -> bool:
+    """True если lastmod (YYYY-MM-...) совпадает с нужным месяцем И годом.
+    Если mm не задан — возвращает True (фильтр отключён)."""
+    if not mm:
+        return True
+    if not lastmod:
+        return False
+    parts = lastmod.split("-")
+    if len(parts) < 2:
+        return False
+    if parts[1] != mm:
+        return False
+    return parts[0] == _report_year_for_mm(mm)
+
+
 @dataclass
 class CompetitorData:
     key: str
@@ -359,6 +385,23 @@ def urlopen_with_ssl_fallback(req, timeout):
         ctx.check_hostname = False
         ctx.verify_mode = ssl.CERT_NONE
         return urllib.request.urlopen(req, timeout=timeout, context=ctx)
+
+
+def _resolve_redirect_url(url: str, timeout: int = 5) -> str:
+    """Следует HTTP-редиректам и возвращает финальный URL.
+    Используется для раскрытия news.google.com/rss/articles/... ссылок."""
+    if "news.google.com" not in url:
+        return url
+    try:
+        req = urllib.request.Request(
+            url,
+            headers={"User-Agent": "Mozilla/5.0 MarketingMonitor/1.0"},
+            method="HEAD",
+        )
+        with urlopen_with_ssl_fallback(req, timeout=timeout) as resp:
+            return resp.url
+    except Exception:
+        return url
 
 
 def request_text(url, timeout=12, extra_headers=None):
@@ -924,13 +967,19 @@ def collect_web_mentions(comp, month):
 
     def add(item):
         url = item.get("url", "")
+        # Раскрываем Google News redirect URL → настоящий адрес статьи
+        if "news.google.com" in url:
+            resolved = _resolve_redirect_url(url)
+            if resolved and resolved != url:
+                item = dict(item)
+                item["url"] = resolved
+                url = resolved
         if url in seen_urls or not url.startswith("http"):
             return
         # Фильтр по месяцу
         lm = item.get("lastmod", "")
         if mm and lm:
-            parts = lm.split("-")
-            if len(parts) >= 2 and parts[1] != mm:
+            if not _date_matches(lm, mm):
                 return
         # Если дата неизвестна или нет описания — читаем страницу
         needs_fetch = (mm and not lm) or not item.get("snippet")
@@ -941,8 +990,7 @@ def collect_web_mentions(comp, month):
                     lm = extract_visible_date(page)
                     if lm:
                         item["lastmod"] = lm
-                        parts = lm.split("-")
-                        if len(parts) >= 2 and parts[1] != mm:
+                        if not _date_matches(lm, mm):
                             return
                     elif mm:
                         return  # дата неизвестна → пропускаем
@@ -1309,11 +1357,8 @@ def item_matches_month(item, mm):
     lastmod = item.get("lastmod", "")
     url = item.get("url", "")
     if lastmod:
-        # lastmod формат YYYY-MM-DD или YYYY-MM
-        parts = lastmod.split("-")
-        if len(parts) >= 2 and parts[1] == mm:
-            return True
-        return False  # lastmod есть, но не тот месяц
+        # lastmod формат YYYY-MM-DD или YYYY-MM — проверяем год И месяц
+        return _date_matches(lastmod, mm)
     if _url_month(url, mm):
         return True
     # Видимая дата читается при fetch страницы — делается снаружи
@@ -1591,8 +1636,7 @@ def collect_site(comp, month=None):
                 if visible_date:
                     ext_item = dict(ext_item)
                     ext_item["lastmod"] = visible_date
-                    parts = visible_date.split("-")
-                    if len(parts) >= 2 and parts[1] == mm:
+                    if _date_matches(visible_date, mm):
                         ptitle, _ = parse_title_description(ext_page)
                         if ptitle:
                             ext_item["title"] = ptitle[:180]
@@ -1778,10 +1822,8 @@ def parse_event_from_tg_post(raw_html, channel_url, month=None):
 
     # Фильтр по месяцу анализа
     mm = MONTH_NUM.get(month, "") if month else ""
-    if mm and event_date:
-        parts = event_date.split("-")
-        if len(parts) >= 2 and parts[1] != mm:
-            return None  # мероприятие в другом месяце
+    if mm and event_date and not _date_matches(event_date, mm):
+        return None  # мероприятие в другом месяце
     # Если дата не найдена и месяц задан — включаем (дата могла быть в предыдущем посте)
 
     # Ссылки из поста
@@ -2055,10 +2097,8 @@ def collect_vk(group_slug, month=None):
         for p in posts_raw:
             lm = p.get("lastmod", "")
             if mm:
-                if lm:
-                    parts = lm.split("-")
-                    if len(parts) >= 2 and parts[1] == mm:
-                        result["posts"].append(p)
+                if lm and _date_matches(lm, mm):
+                    result["posts"].append(p)
                 # Без даты — не включаем (в VK даты почти всегда есть)
             else:
                 result["posts"].append(p)
@@ -2201,10 +2241,8 @@ def collect_updates(comp, sitemap_data, tg_posts, month=None):
         seen.add(key)
         # Фильтр по месяцу
         dt = upd.get("date", "")
-        if mm and dt:
-            parts = dt.split("-")
-            if len(parts) >= 2 and parts[1] != mm:
-                return
+        if mm and dt and not _date_matches(dt, mm):
+            return
         updates.append(upd)
 
     # ── 1. Sitemap: ищем URL про обновления ───────────────────────────────
@@ -2212,10 +2250,8 @@ def collect_updates(comp, sitemap_data, tg_posts, month=None):
         if not _UPDATE_URL_PAT.search(url):
             continue
         # Проверяем месяц по lastmod или идём на страницу
-        if mm and lastmod:
-            parts = lastmod.split("-")
-            if len(parts) >= 2 and parts[1] != mm:
-                continue
+        if mm and lastmod and not _date_matches(lastmod, mm):
+            continue
         try:
             page = request_text(url, timeout=10)
             # Проверяем заголовок страницы
@@ -2316,8 +2352,7 @@ def collect_dzen(slug, month=None):
                 pass
 
             if mm and lastmod:
-                parts = lastmod.split("-")
-                if len(parts) < 2 or parts[1] != mm:
+                if not _date_matches(lastmod, mm):
                     continue
             elif mm and not lastmod:
                 continue  # без даты пропускаем
@@ -2430,10 +2465,8 @@ def collect_social_channels(comp, month=None):
                     if not (t and l):
                         continue
                     lastmod = (d.group(1) or "")[:10] if d else ""
-                    if mm and lastmod:
-                        parts = lastmod.split("-")
-                        if len(parts) >= 2 and parts[1] != mm:
-                            continue
+                    if mm and lastmod and not _date_matches(lastmod, mm):
+                        continue
                     title = clean_text(re.sub(r"<[^>]+>", "", t.group(1)))
                     posts.append({"title": title, "url": clean_text(l.group(1)), "lastmod": lastmod, "category": "Видео"})
             sub_m = re.search(r'"subscriberCountText"\s*:\s*\{"simpleText"\s*:\s*"([^"]+)"', yt_page)
@@ -2484,10 +2517,8 @@ def collect_social_channels(comp, month=None):
                 rt_page, re.S,
             ):
                 lastmod = m.group(3)[:10]
-                if mm:
-                    parts = lastmod.split("-")
-                    if len(parts) >= 2 and parts[1] != mm:
-                        continue
+                if mm and not _date_matches(lastmod, mm):
+                    continue
                 posts.append({"title": m.group(1), "url": "https://rutube.ru" + m.group(2) if m.group(2).startswith("/") else m.group(2), "lastmod": lastmod, "category": "Видео"})
             cats = {"Видео": len(posts)}
             channels.append({
@@ -2739,15 +2770,33 @@ def clean_snippet(raw: str) -> str:
 
 
 def is_relevant_mention(item: dict, comp_name: str) -> bool:
-    """Проверяет что упоминание реально про конкурента."""
+    """Проверяет что упоминание реально про конкурента.
+
+    Приоритеты (от строгого к мягкому):
+    1. Полное имя как подстрока — самый надёжный сигнал.
+    2. Для многословных имён (≥2 слова) — все слова должны встречаться
+       (покрывает аббревиатуры типа «MD Audit»: оба слова обязательны).
+    3. Для однословных имён — слово целиком (через границу слова).
+    """
     name_lower = comp_name.lower()
-    # Берём ключевые слова из имени (убираем короткие)
-    name_words = [w for w in re.split(r"\s+|-", name_lower) if len(w) >= 3]
     title_lower   = (item.get("title", "") or "").lower()
     snippet_lower = (item.get("snippet", "") or "").lower()
     domain_lower  = (item.get("url", "") or "").lower()
     combined = title_lower + " " + snippet_lower + " " + domain_lower
-    return any(w in combined for w in name_words)
+
+    # 1. Точное совпадение полного имени
+    if name_lower in combined:
+        return True
+
+    name_words = [w for w in re.split(r"[\s\-]+", name_lower) if w]
+
+    # 2. Многословное имя: ВСЕ слова должны присутствовать
+    if len(name_words) >= 2:
+        return all(w in combined for w in name_words)
+
+    # 3. Одно слово: проверяем как отдельное слово (границы)
+    word = name_words[0] if name_words else name_lower
+    return bool(re.search(rf"\b{re.escape(word)}\b", combined))
 
 
 def mention_item_html(x):
@@ -2981,10 +3030,9 @@ def filter_by_month(items_list, month):
         url = item.get("url", "")
         lastmod = item.get("lastmod", "")
         if lastmod:
-            parts = lastmod.split("-")
-            if len(parts) >= 2 and parts[1] == mm:
+            if _date_matches(lastmod, mm):
                 result.append(item)
-            # иначе дата есть, но другой месяц — не включаем
+            # иначе дата есть, но другой месяц/год — не включаем
         elif _url_month(url, mm):
             result.append(item)
         # Нет ни lastmod, ни даты в URL — не включаем
